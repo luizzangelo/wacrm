@@ -6,6 +6,7 @@ const h = vi.hoisted(() => ({
   dispatchInboundToFlows: vi.fn(),
   dispatchInboundToAiReply: vi.fn(),
   dispatchWebhookEvent: vi.fn(),
+  captureMetaAdAttribution: vi.fn(),
   state: {
     // Result the message upsert's .select() resolves to. A genuine insert
     // returns the row; a replayed delivery conflicts and returns [].
@@ -52,9 +53,12 @@ vi.mock('@supabase/supabase-js', () => ({
                 Promise.resolve({
                   data: [
                     {
+                      id: 'whatsapp-config-1',
                       account_id: 'acc-1',
                       user_id: 'user-1',
                       access_token: 'enc',
+                      waba_id: 'waba-1',
+                      phone_number_id: 'pn-1',
                       mirror_inbound_media: h.state.mirrorInboundMedia,
                     },
                   ],
@@ -201,6 +205,13 @@ vi.mock('@/lib/ai/auto-reply', () => ({
 vi.mock('@/lib/webhooks/deliver', () => ({
   dispatchWebhookEvent: h.dispatchWebhookEvent,
 }))
+vi.mock('@/lib/meta-conversions/attribution', () => ({
+  captureMetaAdAttribution: h.captureMetaAdAttribution,
+  isCtwaReferral: (referral?: { source_type?: string; ctwa_clid?: string }) =>
+    referral?.source_type === 'ad' && Boolean(referral.ctwa_clid?.trim()),
+  maskCtwaClid: (value: string) =>
+    value.length <= 6 ? '***' : `${value.slice(0, 3)}...${value.slice(-3)}`,
+}))
 
 import { POST } from './route'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
@@ -272,6 +283,10 @@ beforeEach(() => {
   h.dispatchInboundToFlows.mockResolvedValue({ consumed: false })
   h.dispatchInboundToAiReply.mockResolvedValue(undefined)
   h.dispatchWebhookEvent.mockResolvedValue(undefined)
+  h.captureMetaAdAttribution.mockResolvedValue({
+    captured: false,
+    reason: 'not_ctwa',
+  })
   h.runAutomationsForTrigger.mockImplementation(() => {
     h.state.automationStarted++
     return new Promise<void>((resolve) => {
@@ -313,6 +328,72 @@ describe('inbound webhook: idempotent insert (#367)', () => {
     expect(h.runAutomationsForTrigger).not.toHaveBeenCalled()
     expect(h.dispatchInboundToAiReply).not.toHaveBeenCalled()
     expect(h.dispatchWebhookEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('inbound webhook: CTWA attribution', () => {
+  const CTWA_MESSAGE = {
+    ...TEXT_MESSAGE,
+    id: 'wamid.CTWA1',
+    referral: {
+      source_type: 'ad',
+      source_id: 'ad-123',
+      ctwa_clid: 'TEST_ctwa-AbC123_xyz',
+    },
+  }
+
+  it('does not delegate organic messages to attribution persistence', async () => {
+    await runWebhook()
+
+    expect(h.captureMetaAdAttribution).not.toHaveBeenCalled()
+  })
+
+  it('delegates capture with the resolved entities and connection snapshot', async () => {
+    await runWebhook(CTWA_MESSAGE)
+
+    expect(h.captureMetaAdAttribution).toHaveBeenCalledWith(expect.anything(), {
+      accountId: 'acc-1',
+      contactId: 'contact-1',
+      conversationId: 'conv-1',
+      whatsappConfig: {
+        id: 'whatsapp-config-1',
+        waba_id: 'waba-1',
+        phone_number_id: 'pn-1',
+      },
+      whatsappMessageId: 'wamid.CTWA1',
+      whatsappMessageTimestamp: '1700000000',
+      referral: CTWA_MESSAGE.referral,
+    })
+  })
+
+  it('attempts capture on a deduplicated message so replay can heal it', async () => {
+    h.state.messageUpsertResult = []
+
+    await runWebhook(CTWA_MESSAGE)
+
+    expect(h.captureMetaAdAttribution).toHaveBeenCalledTimes(1)
+    expect(h.state.rpcCalls).toHaveLength(0)
+    expect(h.dispatchInboundToFlows).not.toHaveBeenCalled()
+  })
+
+  it('keeps downstream processing alive and logs only masked/sanitized failure data', async () => {
+    h.captureMetaAdAttribution.mockRejectedValueOnce({
+      code: '08006',
+      message: 'secret-token TEST_ctwa-AbC123_xyz',
+    })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await runWebhook(CTWA_MESSAGE)
+
+    expect(h.state.rpcCalls).toHaveLength(1)
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    expect(h.dispatchWebhookEvent).toHaveBeenCalledTimes(1)
+    const serializedLogs = JSON.stringify(errorSpy.mock.calls)
+    expect(serializedLogs).toContain('[meta-conversions][attribution]')
+    expect(serializedLogs).toContain('TES...xyz')
+    expect(serializedLogs).toContain('08006')
+    expect(serializedLogs).not.toContain('TEST_ctwa-AbC123_xyz')
+    expect(serializedLogs).not.toContain('secret-token')
   })
 })
 

@@ -15,6 +15,13 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
+import {
+  captureMetaAdAttribution,
+  isCtwaReferral,
+  maskCtwaClid,
+  type WhatsAppConfigAttributionSnapshot,
+  type WhatsAppReferral,
+} from '@/lib/meta-conversions/attribution'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -70,6 +77,8 @@ interface WhatsAppMessage {
   button?: { text?: string; payload?: string }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /** Present when Meta attributes the inbound message to a referral source. */
+  referral?: WhatsAppReferral
 }
 
 interface WhatsAppWebhookEntry {
@@ -315,7 +324,14 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // Default ON: the column is NOT NULL DEFAULT TRUE, but a row
           // read before migration 039 lands would have it undefined,
           // and losing attachments is the failure mode worth avoiding.
-          config.mirror_inbound_media !== false
+          config.mirror_inbound_media !== false,
+          // Reuse the exact connection matched by metadata.phone_number_id.
+          // These values become immutable attribution receiver snapshots.
+          {
+            id: config.id,
+            waba_id: config.waba_id ?? null,
+            phone_number_id: config.phone_number_id,
+          }
         )
       }
     }
@@ -586,7 +602,8 @@ async function processMessage(
   accessToken: string,
   // Per-account opt-out for the inbound-media mirror (migration 039).
   // See parseMessageContent for what it turns off.
-  mirrorMedia: boolean
+  mirrorMedia: boolean,
+  whatsappConfig: WhatsAppConfigAttributionSnapshot
 ) {
   const senderPhone = normalizePhone(message.from)
   const contactName = contact.profile.name
@@ -725,6 +742,35 @@ async function processMessage(
   if (msgError) {
     console.error('Error inserting message:', msgError)
     return
+  }
+
+  // Capture after the message insert succeeds, but before the replay return.
+  // This lets a repeated webhook heal a prior attribution-only failure while
+  // preserving the existing message idempotency boundary and downstream flow.
+  if (isCtwaReferral(message.referral)) {
+    try {
+      await captureMetaAdAttribution(supabaseAdmin(), {
+        accountId,
+        contactId: contactRecord.id,
+        conversationId: conversation.id,
+        whatsappConfig,
+        whatsappMessageId: message.id,
+        whatsappMessageTimestamp: message.timestamp,
+        referral: message.referral,
+      })
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String(error.code)
+          : 'unknown'
+      console.error('[meta-conversions][attribution]', {
+        account_id: accountId,
+        message_id: message.id,
+        ctwa_clid: maskCtwaClid(message.referral.ctwa_clid),
+        status: 'failed',
+        error_code: code,
+      })
+    }
   }
 
   // Replayed delivery: the message already exists, so acknowledge it as a
