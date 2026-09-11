@@ -22,6 +22,10 @@ import {
   type WhatsAppConfigAttributionSnapshot,
   type WhatsAppReferral,
 } from '@/lib/meta-conversions/attribution'
+import {
+  createMetaEnrichmentRepository,
+  enrichMetaAdAttribution,
+} from '@/lib/meta-conversions/enrichment'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -747,9 +751,10 @@ async function processMessage(
   // Capture after the message insert succeeds, but before the replay return.
   // This lets a repeated webhook heal a prior attribution-only failure while
   // preserving the existing message idempotency boundary and downstream flow.
+  let capturedAttributionId: string | null = null
   if (isCtwaReferral(message.referral)) {
     try {
-      await captureMetaAdAttribution(supabaseAdmin(), {
+      const captureResult = await captureMetaAdAttribution(supabaseAdmin(), {
         accountId,
         contactId: contactRecord.id,
         conversationId: conversation.id,
@@ -758,6 +763,9 @@ async function processMessage(
         whatsappMessageTimestamp: message.timestamp,
         referral: message.referral,
       })
+      if (captureResult.captured) {
+        capturedAttributionId = captureResult.attributionId
+      }
     } catch (error) {
       const code =
         error && typeof error === 'object' && 'code' in error
@@ -940,6 +948,30 @@ async function processMessage(
     content_type: contentType,
     text: contentText,
   })
+
+  // Enrichment is deliberately last: a slow or unavailable Marketing API
+  // cannot delay unread, flows, automations, AI, or public webhooks. It is
+  // still awaited inside Next.js after(), so the runtime keeps the work alive.
+  // The protected recovery cron retries pending/failed rows durably.
+  if (capturedAttributionId) {
+    try {
+      await enrichMetaAdAttribution({
+        repository: createMetaEnrichmentRepository(supabaseAdmin()),
+        accountId,
+        attributionId: capturedAttributionId,
+      })
+    } catch (error) {
+      console.error('[meta-conversions][enrichment]', {
+        account_id: accountId,
+        attribution_id: capturedAttributionId,
+        status: 'failed',
+        error_code:
+          error && typeof error === 'object' && 'code' in error
+            ? String(error.code).slice(0, 64)
+            : 'unknown',
+      })
+    }
+  }
 }
 
 async function parseMessageContent(

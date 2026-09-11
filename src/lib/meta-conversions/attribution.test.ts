@@ -14,25 +14,34 @@ function attributionDb(options?: { failureCode?: string }) {
   const rows: StoredAttribution[] = [];
   const tables: string[] = [];
   const upsert = vi.fn(
-    async (
+    (
       payload: StoredAttribution,
       config: { onConflict?: string; ignoreDuplicates?: boolean }
     ) => {
       void config;
-      if (options?.failureCode) {
-        return {
-          error: { code: options.failureCode, message: 'secret-token' },
-        };
-      }
-
       const existing = rows.find(
         (row) =>
           row.account_id === payload.account_id &&
           row.ctwa_clid === payload.ctwa_clid
       );
-      if (!existing) rows.push(structuredClone(payload));
+      const id = `attribution-${rows.length + 1}`;
 
-      return { error: null };
+      return {
+        select: (columns: string) => ({
+          maybeSingle: async () => {
+            if (options?.failureCode) {
+              return {
+                data: null,
+                error: { code: options.failureCode, message: 'secret-token' },
+              };
+            }
+            if (existing) return { data: null, error: null };
+            rows.push({ id, ...structuredClone(payload) });
+            return { data: { id }, error: null };
+          },
+          columns,
+        }),
+      };
     }
   );
   const db = {
@@ -100,7 +109,10 @@ describe('CTWA referral recognition', () => {
         ...BASE_INPUT,
         referral: COMPLETE_REFERRAL,
       })
-    ).resolves.toEqual({ captured: true });
+    ).resolves.toEqual({
+      captured: true,
+      attributionId: 'attribution-1',
+    });
 
     expect(rows).toHaveLength(1);
   });
@@ -168,6 +180,7 @@ describe('CTWA attribution persistence', () => {
         ignoreDuplicates: true,
       }
     );
+    expect(upsert.mock.results[0].value.select('id')).toBeDefined();
   });
 
   it('keeps exactly one row for an identical replay', async () => {

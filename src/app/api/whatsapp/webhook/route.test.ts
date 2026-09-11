@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
   dispatchInboundToAiReply: vi.fn(),
   dispatchWebhookEvent: vi.fn(),
   captureMetaAdAttribution: vi.fn(),
+  createMetaEnrichmentRepository: vi.fn(),
+  enrichMetaAdAttribution: vi.fn(),
   state: {
     // Result the message upsert's .select() resolves to. A genuine insert
     // returns the row; a replayed delivery conflicts and returns [].
@@ -212,6 +214,10 @@ vi.mock('@/lib/meta-conversions/attribution', () => ({
   maskCtwaClid: (value: string) =>
     value.length <= 6 ? '***' : `${value.slice(0, 3)}...${value.slice(-3)}`,
 }))
+vi.mock('@/lib/meta-conversions/enrichment', () => ({
+  createMetaEnrichmentRepository: h.createMetaEnrichmentRepository,
+  enrichMetaAdAttribution: h.enrichMetaAdAttribution,
+}))
 
 import { POST } from './route'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
@@ -287,6 +293,8 @@ beforeEach(() => {
     captured: false,
     reason: 'not_ctwa',
   })
+  h.createMetaEnrichmentRepository.mockReturnValue({})
+  h.enrichMetaAdAttribution.mockResolvedValue({ status: 'enriched' })
   h.runAutomationsForTrigger.mockImplementation(() => {
     h.state.automationStarted++
     return new Promise<void>((resolve) => {
@@ -349,6 +357,10 @@ describe('inbound webhook: CTWA attribution', () => {
   })
 
   it('delegates capture with the resolved entities and connection snapshot', async () => {
+    h.captureMetaAdAttribution.mockResolvedValueOnce({
+      captured: true,
+      attributionId: 'attribution-1',
+    })
     await runWebhook(CTWA_MESSAGE)
 
     expect(h.captureMetaAdAttribution).toHaveBeenCalledWith(expect.anything(), {
@@ -364,6 +376,14 @@ describe('inbound webhook: CTWA attribution', () => {
       whatsappMessageTimestamp: '1700000000',
       referral: CTWA_MESSAGE.referral,
     })
+    expect(h.enrichMetaAdAttribution).toHaveBeenCalledWith({
+      repository: {},
+      accountId: 'acc-1',
+      attributionId: 'attribution-1',
+    })
+    expect(h.dispatchWebhookEvent.mock.invocationCallOrder[0]).toBeLessThan(
+      h.enrichMetaAdAttribution.mock.invocationCallOrder[0]
+    )
   })
 
   it('attempts capture on a deduplicated message so replay can heal it', async () => {
@@ -394,6 +414,31 @@ describe('inbound webhook: CTWA attribution', () => {
     expect(serializedLogs).toContain('08006')
     expect(serializedLogs).not.toContain('TEST_ctwa-AbC123_xyz')
     expect(serializedLogs).not.toContain('secret-token')
+  })
+
+  it('keeps all existing downstream work complete when automatic enrichment fails', async () => {
+    h.captureMetaAdAttribution.mockResolvedValueOnce({
+      captured: true,
+      attributionId: 'attribution-1',
+    })
+    h.enrichMetaAdAttribution.mockRejectedValueOnce({
+      code: '08006',
+      message: 'EA_SECRET_TOKEN',
+    })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await runWebhook(CTWA_MESSAGE)
+
+    expect(h.state.rpcCalls).toHaveLength(1)
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    expect(h.runAutomationsForTrigger).toHaveBeenCalled()
+    expect(h.dispatchInboundToAiReply).toHaveBeenCalledTimes(1)
+    expect(h.dispatchWebhookEvent).toHaveBeenCalledTimes(1)
+    expect(h.enrichMetaAdAttribution).toHaveBeenCalledTimes(1)
+    const serializedLogs = JSON.stringify(errorSpy.mock.calls)
+    expect(serializedLogs).toContain('[meta-conversions][enrichment]')
+    expect(serializedLogs).toContain('08006')
+    expect(serializedLogs).not.toContain('EA_SECRET_TOKEN')
   })
 })
 

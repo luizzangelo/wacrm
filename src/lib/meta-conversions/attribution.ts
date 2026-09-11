@@ -57,7 +57,8 @@ type MetaAdAttributionInsert = Pick<
 >;
 
 export type CaptureMetaAdAttributionResult =
-  { captured: false; reason: 'not_ctwa' } | { captured: true };
+  | { captured: false; reason: 'not_ctwa' }
+  | { captured: true; attributionId: string | null };
 
 export class MetaAttributionPersistenceError extends Error {
   constructor(readonly code: string) {
@@ -146,16 +147,22 @@ export async function captureMetaAdAttribution(
   const payload = buildMetaAdAttributionPayload(input);
   if (!payload) return { captured: false, reason: 'not_ctwa' };
 
-  const { error } = await db.from('meta_ad_attributions').upsert(payload, {
-    onConflict: 'account_id,ctwa_clid',
-    ignoreDuplicates: true,
-  });
+  const { data, error } = await db
+    .from('meta_ad_attributions')
+    .upsert(payload, {
+      onConflict: 'account_id,ctwa_clid',
+      ignoreDuplicates: true,
+    })
+    .select('id')
+    .maybeSingle();
 
   if (error) {
     throw new MetaAttributionPersistenceError(databaseErrorCode(error));
   }
 
-  return { captured: true };
+  // ignoreDuplicates returns no row for a replay. Only a newly inserted
+  // attribution is automatically enriched; durable recovery covers replays.
+  return { captured: true, attributionId: data?.id ?? null };
 }
 
 export function maskCtwaClid(value: string): string {

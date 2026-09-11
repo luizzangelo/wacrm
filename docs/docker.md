@@ -66,9 +66,13 @@ docker run -d --env-file .env.local -e PORT=3000 -p 3000:3000 wacrm
   Attachment Storage; attachments received while it's off become
   unviewable once Meta drops them. Files over 16 MB (the bucket's
   limit) are never copied.
-- Nothing inside the container is scheduled. If you use automation
-  Wait steps or flows, point an external scheduler at
-  `GET /api/automations/cron` and `GET /api/flows/cron` on this
-  deployment, sending the shared secret in the `x-cron-secret` header
-  (`AUTOMATION_CRON_SECRET`, see `.env.local.example`). Both return
-  503 until that variable is set.
+- Nothing inside the container is scheduled. Point an external scheduler
+  at the endpoints you use: `GET /api/automations/cron` for automation
+  Wait steps, `GET /api/flows/cron` for flows, and
+  `GET /api/meta-conversions/enrichment/cron` for durable retry of the
+  oldest pending/failed Meta ad attributions. Send the shared secret in
+  the `x-cron-secret` header (`AUTOMATION_CRON_SECRET`, see
+  `.env.local.example`). These endpoints return 503 until that variable
+  is set. The Meta enrichment route processes at most two records per
+  invocation and isolates failures per record; schedule subsequent calls
+  to drain larger backlogs without immediate retry loops.
