@@ -573,6 +573,7 @@
       "deleteDeal": "Excluir negócio",
       "toastRequired": "Título, contato e etapa são obrigatórios",
       "toastFailedSave": "Falha ao salvar negócio",
+      "toastStageMoveFailedAfterSave": "Os dados foram salvos, mas não foi possível alterar a etapa. O negócio foi sincronizado com o funil.",
       "toastNotSignedIn": "Você não está conectado",
       "toastNotLinked": "Seu perfil não está vinculado a uma conta.",
       "toastFailedCreate": "Falha ao criar negócio",

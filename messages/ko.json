@@ -573,6 +573,7 @@
       "deleteDeal": "딜 삭제",
       "toastRequired": "제목, 연락처, 단계는 필수입니다",
       "toastFailedSave": "딜을 저장하지 못했습니다",
+      "toastStageMoveFailedAfterSave": "세부 정보는 저장되었지만 단계를 변경하지 못했습니다. 딜이 파이프라인과 동기화되었습니다.",
       "toastNotSignedIn": "로그인되어 있지 않습니다",
       "toastNotLinked": "프로필이 계정에 연결되어 있지 않습니다.",
       "toastFailedCreate": "딜을 만들지 못했습니다",

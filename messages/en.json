@@ -573,6 +573,7 @@
       "deleteDeal": "Delete Deal",
       "toastRequired": "Title, contact, and stage are required",
       "toastFailedSave": "Failed to save deal",
+      "toastStageMoveFailedAfterSave": "The details were saved, but the stage could not be changed. The deal was synchronized with the pipeline.",
       "toastNotSignedIn": "Not signed in",
       "toastNotLinked": "Your profile is not linked to an account.",
       "toastFailedCreate": "Failed to create deal",
