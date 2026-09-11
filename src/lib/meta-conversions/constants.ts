@@ -15,6 +15,15 @@ export const META_CONVERSIONS_GRAPH_BASE = `https://graph.facebook.com/${META_CO
 
 export const META_CONVERSIONS_REQUEST_TIMEOUT_MS = 10_000;
 
+export const META_CONVERSION_EVENT_BATCH_SIZE = 5;
+
+export const META_CONVERSION_EVENT_MAX_ATTEMPTS = 3;
+
+// A claim updates meta_conversion_events.updated_at through the existing
+// database trigger. This lease exceeds the 10-second HTTP timeout and keeps a
+// slightly delayed worker from claiming N+1 while N is still in flight.
+export const META_CONVERSION_EVENT_CLAIM_LEASE_MS = 30_000;
+
 // An attribution may need one 10-second Ad request followed by parallel
 // Ad Set/Campaign fallbacks with the same timeout. Two sequential items keep
 // that worst case below the recovery route's 60-second execution budget.
