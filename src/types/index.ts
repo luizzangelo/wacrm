@@ -1,5 +1,5 @@
-import type { AccountRole } from "@/lib/auth/roles";
-import type { InteractiveMessagePayload } from "@/lib/whatsapp/interactive";
+import type { AccountRole } from '@/lib/auth/roles';
+import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive';
 
 export type {
   InteractiveMessagePayload,
@@ -8,7 +8,7 @@ export type {
   InteractiveButton,
   InteractiveListRow,
   InteractiveListSection,
-} from "@/lib/whatsapp/interactive";
+} from '@/lib/whatsapp/interactive';
 
 export interface Profile {
   id: string;
@@ -87,7 +87,7 @@ export interface AccountInvitation {
   id: string;
   account_id: string;
   /** Roles offered via invite — owner is never offered. */
-  role: Exclude<AccountRole, "owner">;
+  role: Exclude<AccountRole, 'owner'>;
   created_by_user_id: string | null;
   label: string | null;
   created_at: string;
@@ -216,7 +216,8 @@ export type ContentType =
   | 'template'
   /** Customer tapped a reply button or list row on a message we sent. */
   | 'interactive';
-export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageStatus =
+  'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface Message {
   id: string;
@@ -348,6 +349,91 @@ export interface MessageTemplate {
   created_at: string;
 }
 
+// ============================================================
+// Meta Conversions foundation (040_meta_conversions_foundation.sql)
+// ============================================================
+
+export type MetaConversionEvent =
+  'LeadSubmitted' | 'QualifiedLead' | 'Purchase';
+
+export type MetaAttributionEnrichmentStatus = 'pending' | 'enriched' | 'failed';
+
+export type MetaConversionEventStatus =
+  | 'pending'
+  | 'sent'
+  | 'failed'
+  | 'skipped_disabled'
+  | 'skipped_no_attribution'
+  | 'skipped_missing_config';
+
+/** Server-managed configuration. Token fields contain ciphertext. */
+export interface MetaConversionConfig {
+  id: string;
+  account_id: string;
+  dataset_id: string | null;
+  access_token: string | null;
+  marketing_access_token: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaAdAttribution {
+  id: string;
+  account_id: string;
+  contact_id: string | null;
+  conversation_id: string | null;
+  whatsapp_config_id: string | null;
+  whatsapp_message_id: string | null;
+  ctwa_clid: string;
+  source_id: string | null;
+  source_type: string | null;
+  source_url: string | null;
+  referral_headline: string | null;
+  referral_body: string | null;
+  media_type: string | null;
+  image_url: string | null;
+  video_url: string | null;
+  thumbnail_url: string | null;
+  /** Immutable receiver snapshots retained if whatsapp_config is deleted. */
+  waba_id: string | null;
+  phone_number_id: string | null;
+  ad_id: string | null;
+  ad_name: string | null;
+  adset_id: string | null;
+  adset_name: string | null;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  enrichment_status: MetaAttributionEnrichmentStatus;
+  enrichment_error: string | null;
+  enriched_at: string | null;
+  received_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaConversionEventLog {
+  id: string;
+  account_id: string;
+  deal_id: string | null;
+  contact_id: string | null;
+  attribution_id: string | null;
+  stage_id: string | null;
+  event_name: MetaConversionEvent;
+  event_id: string;
+  event_time: string;
+  value: number | null;
+  currency: string | null;
+  status: MetaConversionEventStatus;
+  attempts: number;
+  meta_http_status: number | null;
+  meta_response: Record<string, unknown> | null;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Pipeline {
   id: string;
   user_id: string;
@@ -361,6 +447,7 @@ export interface PipelineStage {
   name: string;
   position: number;
   color: string;
+  meta_conversion_event?: MetaConversionEvent | null;
   created_at: string;
 }
 
@@ -381,6 +468,7 @@ export interface Deal {
   title: string;
   value: number;
   currency?: string;
+  meta_attribution_id?: string | null;
   notes?: string;
   expected_close_date?: string;
   status?: DealStatus;
@@ -391,8 +479,10 @@ export interface Deal {
   assignee?: Profile;
 }
 
-export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
-export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
+export type BroadcastStatus =
+  'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+export type RecipientStatus =
+  'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
 export interface Broadcast {
   id: string;
@@ -574,10 +664,7 @@ export interface WaitStepConfig {
 }
 
 export type ConditionSubject =
-  | 'contact_field'
-  | 'tag_presence'
-  | 'message_content'
-  | 'time_of_day';
+  'contact_field' | 'tag_presence' | 'message_content' | 'time_of_day';
 
 export interface ConditionStepConfig {
   subject: ConditionSubject;

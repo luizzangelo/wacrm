@@ -69,3 +69,6 @@ jobs:
       # just the absence of an error.
       - name: Verify the resulting schema
         run: supabase db query --local --file supabase/ci/verify-schema.sql
+
+      - name: Verify Meta conversions foundation
+        run: supabase db query --local --file supabase/ci/verify-meta-conversions.sql
