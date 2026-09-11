@@ -299,6 +299,18 @@
       "networkError": "Não foi possível acessar o servidor."
     }
   },
+  "MetaAdsAttribution": {
+    "title": "Origem Meta Ads",
+    "badge": "Meta Ads",
+    "campaign": "Campanha",
+    "adSet": "Conjunto de anúncios",
+    "ad": "Anúncio",
+    "pending": "Dados da campanha pendentes",
+    "failed": "Não foi possível identificar os detalhes da campanha.",
+    "recordedAt": "Origem registrada em: {date}",
+    "dealFixed": "Origem vinculada a este negócio",
+    "contactPreview": "Origem Meta Ads do contato — apenas visualização"
+  },
   "Contacts": {
     "page": {
       "title": "Contatos",

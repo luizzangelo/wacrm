@@ -299,6 +299,18 @@
       "networkError": "서버에 연결할 수 없습니다."
     }
   },
+  "MetaAdsAttribution": {
+    "title": "Meta 광고 유입 경로",
+    "badge": "Meta Ads",
+    "campaign": "캠페인",
+    "adSet": "광고 세트",
+    "ad": "광고",
+    "pending": "캠페인 세부 정보를 확인 중입니다",
+    "failed": "캠페인 세부 정보를 확인할 수 없습니다.",
+    "recordedAt": "유입 경로 기록 시각: {date}",
+    "dealFixed": "이 딜에 연결된 유입 경로",
+    "contactPreview": "연락처의 Meta 광고 유입 경로 — 미리보기 전용"
+  },
   "Contacts": {
     "page": {
       "title": "연락처",

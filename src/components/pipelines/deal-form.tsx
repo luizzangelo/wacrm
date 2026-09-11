@@ -5,6 +5,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { CURRENCIES } from "@/lib/currency";
+import {
+  getDealMetaAttribution,
+  type DealMetaAttributionSelection,
+} from "@/lib/meta-conversions/attribution-view";
 import type {
   Contact,
   Conversation,
@@ -23,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MetaAdsAttributionCard } from "@/components/meta-conversions/meta-ads-attribution-card";
 import {
   Check,
   X,
@@ -70,6 +75,13 @@ export function DealForm({
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [linkedConversation, setLinkedConversation] =
     useState<Conversation | null>(null);
+  const [metaAttributionState, setMetaAttributionState] = useState<{
+    requestKey: string;
+    selection: DealMetaAttributionSelection;
+  }>({
+    requestKey: "",
+    selection: { attribution: null, source: null },
+  });
 
   const [saving, setSaving] = useState(false);
   const [statusAction, setStatusAction] = useState<DealStatus | null>(null);
@@ -150,6 +162,58 @@ export function DealForm({
       cancelled = true;
     };
   }, [open, contactId, supabase]);
+
+  const fixedMetaAttributionId = deal?.meta_attribution_id ?? null;
+  const previewContactId = fixedMetaAttributionId ? null : contactId || null;
+  const metaAttributionRequestKey =
+    open && accountId && (fixedMetaAttributionId || previewContactId)
+      ? `${accountId}:${fixedMetaAttributionId ? `fixed:${fixedMetaAttributionId}` : `preview:${previewContactId}`}`
+      : "";
+  useEffect(() => {
+    if (!metaAttributionRequestKey || !accountId) return;
+    let cancelled = false;
+
+    getDealMetaAttribution(supabase, {
+      accountId,
+      metaAttributionId: fixedMetaAttributionId,
+      contactId: previewContactId,
+    })
+      .then((selection) => {
+        if (!cancelled) {
+          setMetaAttributionState({
+            requestKey: metaAttributionRequestKey,
+            selection,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMetaAttributionState({
+            requestKey: metaAttributionRequestKey,
+            selection: { attribution: null, source: null },
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accountId,
+    fixedMetaAttributionId,
+    metaAttributionRequestKey,
+    previewContactId,
+    supabase,
+  ]);
+
+  const currentMetaAttributionSelection =
+    metaAttributionState.requestKey === metaAttributionRequestKey
+      ? metaAttributionState.selection
+      : { attribution: null, source: null };
+  const loadingMetaAttribution = Boolean(
+    metaAttributionRequestKey &&
+      metaAttributionState.requestKey !== metaAttributionRequestKey,
+  );
 
   async function handleSave() {
     if (!title.trim() || !contactId || !stageId) {
@@ -294,6 +358,12 @@ export function DealForm({
                 </Link>
               )}
             </div>
+
+            <MetaAdsAttributionCard
+              attribution={currentMetaAttributionSelection.attribution}
+              loading={loadingMetaAttribution}
+              context={currentMetaAttributionSelection.source ?? "contact"}
+            />
 
             <div className="grid grid-cols-[1fr_110px] gap-3">
               <div className="grid gap-2">

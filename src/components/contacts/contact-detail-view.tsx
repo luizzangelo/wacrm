@@ -5,6 +5,10 @@ import { createClient } from '@/lib/supabase/client';
 import { addContactTag, deleteContactTag } from '@/lib/contacts/tag-api';
 import { useAuth } from '@/hooks/use-auth';
 import { formatCurrency } from '@/lib/currency';
+import {
+  getLatestContactMetaAttribution,
+  type MetaAdAttributionView,
+} from '@/lib/meta-conversions/attribution-view';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag, ContactNote, CustomField, ContactCustomValue, Deal, MessageTemplate } from '@/types';
 import {
@@ -26,6 +30,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { MetaAdsAttributionCard } from '@/components/meta-conversions/meta-ads-attribution-card';
 import {
   Phone,
   Mail,
@@ -96,6 +101,10 @@ export function ContactDetailView({
   // Deals tab
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loadingDeals, setLoadingDeals] = useState(false);
+  const [metaAttributionState, setMetaAttributionState] = useState<{
+    requestKey: string;
+    attribution: MetaAdAttributionView | null;
+  }>({ requestKey: '', attribution: null });
 
   const fetchContact = useCallback(async () => {
     if (!contactId) return;
@@ -189,6 +198,44 @@ export function ContactDetailView({
       fetchDeals();
     }
   }, [open, contactId, fetchContact, fetchTags, fetchNotes, fetchCustomFields, fetchDeals]);
+
+  const metaAttributionRequestKey =
+    open && accountId && contactId ? `${accountId}:${contactId}` : '';
+  useEffect(() => {
+    if (!metaAttributionRequestKey || !accountId || !contactId) return;
+    let cancelled = false;
+
+    getLatestContactMetaAttribution(supabase, accountId, contactId)
+      .then((attribution) => {
+        if (!cancelled) {
+          setMetaAttributionState({
+            requestKey: metaAttributionRequestKey,
+            attribution,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMetaAttributionState({
+            requestKey: metaAttributionRequestKey,
+            attribution: null,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, contactId, metaAttributionRequestKey, supabase]);
+
+  const currentMetaAttribution =
+    metaAttributionState.requestKey === metaAttributionRequestKey
+      ? metaAttributionState.attribution
+      : null;
+  const loadingMetaAttribution = Boolean(
+    metaAttributionRequestKey &&
+      metaAttributionState.requestKey !== metaAttributionRequestKey,
+  );
 
   async function copyPhone() {
     if (!contact) return;
@@ -534,6 +581,10 @@ export function ContactDetailView({
                     )}
                     {t('saveChangesBtn')}
                   </Button>
+                  <MetaAdsAttributionCard
+                    attribution={currentMetaAttribution}
+                    loading={loadingMetaAttribution}
+                  />
                 </div>
               </TabsContent>
 
