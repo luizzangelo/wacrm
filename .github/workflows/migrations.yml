@@ -72,3 +72,6 @@ jobs:
 
       - name: Verify Meta conversions foundation
         run: supabase db query --local --file supabase/ci/verify-meta-conversions.sql
+
+      - name: Verify Meta conversion stage outbox
+        run: supabase db query --local --file supabase/ci/verify-meta-conversion-stage-outbox.sql

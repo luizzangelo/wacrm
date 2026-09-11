@@ -1,288 +1,297 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DealStageMoveError,
   createDealStageRepository,
   moveDealToStage,
   type DealStageRepository,
-  type DealStageSnapshot,
-  type DealStageTarget,
+  type MoveDealToStageInput,
 } from './move-deal-stage';
 
-interface MemoryDeal extends DealStageSnapshot {
-  account_id: string;
-}
-
-function deal(overrides: Partial<MemoryDeal> = {}): MemoryDeal {
-  return {
-    id: 'deal-a',
-    user_id: 'user-a',
-    account_id: 'account-a',
-    pipeline_id: 'pipeline-a',
-    stage_id: 'stage-a',
-    contact_id: 'contact-a',
-    conversation_id: 'conversation-a',
-    title: 'Deal A',
-    value: 100,
-    currency: 'BRL',
-    assigned_to: null,
-    notes: null,
-    expected_close_date: null,
-    status: 'open',
-    meta_attribution_id: 'attribution-a',
-    created_at: '2026-09-11T00:00:00.000Z',
-    updated_at: '2026-09-11T00:00:00.000Z',
-    ...overrides,
-  };
-}
-
-class MemoryRepository implements DealStageRepository {
-  deals = new Map<string, MemoryDeal>();
-  pipelines = new Map<string, string>();
-  stages = new Map<string, DealStageTarget>();
-  compareAndSetCalls = 0;
-
-  constructor() {
-    this.deals.set('deal-a', deal());
-    this.pipelines.set('pipeline-a', 'account-a');
-    this.pipelines.set('pipeline-b', 'account-a');
-    this.pipelines.set('pipeline-foreign', 'account-b');
-    this.stages.set('stage-a', {
-      id: 'stage-a',
-      pipeline_id: 'pipeline-a',
-      meta_conversion_event: null,
-    });
-    this.stages.set('stage-b', {
-      id: 'stage-b',
-      pipeline_id: 'pipeline-a',
-      meta_conversion_event: 'LeadSubmitted',
-    });
-    this.stages.set('stage-c', {
-      id: 'stage-c',
-      pipeline_id: 'pipeline-a',
-      meta_conversion_event: 'QualifiedLead',
-    });
-    this.stages.set('other-pipeline-stage', {
-      id: 'other-pipeline-stage',
-      pipeline_id: 'pipeline-b',
-      meta_conversion_event: null,
-    });
-    this.stages.set('foreign-stage', {
-      id: 'foreign-stage',
-      pipeline_id: 'pipeline-foreign',
-      meta_conversion_event: null,
-    });
-  }
-
-  async findDeal(accountId: string, dealId: string) {
-    const found = this.deals.get(dealId);
-    if (!found || found.account_id !== accountId) return null;
-    const { account_id: scopedAccountId, ...snapshot } = found;
-    void scopedAccountId;
-    return { ...snapshot };
-  }
-
-  async pipelineBelongsToAccount(accountId: string, pipelineId: string) {
-    return this.pipelines.get(pipelineId) === accountId;
-  }
-
-  async findStages(pipelineId: string, stageIds: string[]) {
-    return stageIds.flatMap((stageId) => {
-      const found = this.stages.get(stageId);
-      return found?.pipeline_id === pipelineId ? [{ ...found }] : [];
-    });
-  }
-
-  async compareAndSetStage(input: {
-    accountId: string;
-    dealId: string;
-    oldStageId: string;
-    newStageId: string;
-  }) {
-    this.compareAndSetCalls += 1;
-    const current = this.deals.get(input.dealId);
-    if (
-      !current ||
-      current.account_id !== input.accountId ||
-      current.stage_id !== input.oldStageId
-    ) {
-      return null;
-    }
-    current.stage_id = input.newStageId;
-    current.updated_at = '2026-09-11T00:01:00.000Z';
-    return this.findDeal(input.accountId, input.dealId);
-  }
-}
-
-const input = {
+const input: MoveDealToStageInput = {
   accountId: 'account-a',
   actorUserId: 'agent-a',
   dealId: 'deal-a',
   newStageId: 'stage-b',
 };
 
-let repository: MemoryRepository;
+function success(overrides: Record<string, unknown> = {}) {
+  return {
+    ok: true as const,
+    changed: true as const,
+    oldStageId: 'stage-a',
+    newStageId: 'stage-b',
+    deal: {
+      id: 'deal-a',
+      user_id: 'user-a',
+      pipeline_id: 'pipeline-a',
+      stage_id: 'stage-b',
+      contact_id: 'contact-a',
+      conversation_id: 'conversation-a',
+      title: 'Deal A',
+      value: 100,
+      currency: 'BRL',
+      assigned_to: null,
+      notes: null,
+      expected_close_date: null,
+      status: 'open' as const,
+      meta_attribution_id: 'attribution-a',
+      created_at: '2026-09-11T00:00:00.000Z',
+      updated_at: '2026-09-11T00:01:00.000Z',
+    },
+    newStage: {
+      id: 'stage-b',
+      pipeline_id: 'pipeline-a',
+      meta_conversion_event: 'LeadSubmitted' as const,
+    },
+    conversionEventCreated: true,
+    conversionEventStatus: 'pending' as const,
+    conversionEventName: 'LeadSubmitted' as const,
+    ...overrides,
+  };
+}
 
-beforeEach(() => {
-  repository = new MemoryRepository();
-});
+function repositoryReturning(
+  result: Awaited<ReturnType<DealStageRepository['moveWithConversionIntent']>>
+): DealStageRepository {
+  return {
+    moveWithConversionIntent: vi.fn().mockResolvedValue(result),
+  };
+}
 
 describe('moveDealToStage', () => {
-  it('moves a deal to a stage in its pipeline and returns the transition', async () => {
+  it('returns the atomic stage/outbox result without exposing credentials', async () => {
+    const repository = repositoryReturning(success());
+
     const result = await moveDealToStage(repository, input);
 
     expect(result).toMatchObject({
       changed: true,
       oldStageId: 'stage-a',
       newStageId: 'stage-b',
-      deal: { id: 'deal-a', stage_id: 'stage-b' },
+      deal: {
+        id: 'deal-a',
+        stage_id: 'stage-b',
+        meta_attribution_id: 'attribution-a',
+      },
       newStage: {
         id: 'stage-b',
         meta_conversion_event: 'LeadSubmitted',
       },
+      conversionEventCreated: true,
+      conversionEventStatus: 'pending',
+      conversionEventName: 'LeadSubmitted',
     });
-    expect(repository.deals.get('deal-a')?.stage_id).toBe('stage-b');
+    expect(result).not.toHaveProperty('access_token');
+    expect(result).not.toHaveProperty('marketing_access_token');
   });
 
-  it('returns a no-op for the current stage without updating updated_at', async () => {
-    const before = repository.deals.get('deal-a')?.updated_at;
+  it('preserves same-stage no-op semantics and creates no intent', async () => {
+    const repository = repositoryReturning(
+      success({
+        changed: false,
+        reason: 'same_stage',
+        oldStageId: 'stage-b',
+        conversionEventCreated: false,
+        conversionEventStatus: null,
+        conversionEventName: null,
+      })
+    );
 
-    const result = await moveDealToStage(repository, {
-      ...input,
-      newStageId: 'stage-a',
-    });
+    const result = await moveDealToStage(repository, input);
 
     expect(result).toMatchObject({
       changed: false,
       reason: 'same_stage',
-      oldStageId: 'stage-a',
-      newStageId: 'stage-a',
+      conversionEventCreated: false,
+      conversionEventStatus: null,
+      conversionEventName: null,
     });
-    expect(repository.compareAndSetCalls).toBe(0);
-    expect(repository.deals.get('deal-a')?.updated_at).toBe(before);
   });
 
-  it.each(['other-pipeline-stage', 'foreign-stage'])(
-    'rejects unavailable target stage %s without changing the deal',
-    async (newStageId) => {
-      await expect(
-        moveDealToStage(repository, { ...input, newStageId })
-      ).rejects.toMatchObject({
-        code: 'stage_not_available',
-        status: 404,
+  it('does not call Meta while creating a mapped-stage intent', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await moveDealToStage(repositoryReturning(success()), input);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['deal_not_found', 404],
+    ['stage_not_available', 404],
+    ['invalid_current_stage', 409],
+  ] as const)(
+    'maps RPC outcome %s to a safe domain error',
+    async (code, status) => {
+      const repository = repositoryReturning({ ok: false, error: code });
+
+      await expect(moveDealToStage(repository, input)).rejects.toMatchObject({
+        code,
+        status,
       } satisfies Partial<DealStageMoveError>);
-      expect(repository.deals.get('deal-a')?.stage_id).toBe('stage-a');
-      expect(repository.compareAndSetCalls).toBe(0);
     }
   );
 
-  it('does not expose or move a deal from another account', async () => {
-    await expect(
-      moveDealToStage(repository, { ...input, accountId: 'account-b' })
-    ).rejects.toMatchObject({
-      code: 'deal_not_found',
-      status: 404,
-    } satisfies Partial<DealStageMoveError>);
-    expect(repository.compareAndSetCalls).toBe(0);
-  });
-
-  it('rejects an inconsistent current stage instead of repairing it', async () => {
-    const current = repository.deals.get('deal-a');
-    if (!current) throw new Error('fixture missing');
-    current.stage_id = 'other-pipeline-stage';
+  it('preserves the winning stage on a compare-and-set conflict', async () => {
+    const repository = repositoryReturning({
+      ok: false,
+      error: 'stage_conflict',
+      currentStageId: 'stage-c',
+    });
 
     await expect(moveDealToStage(repository, input)).rejects.toMatchObject({
-      code: 'invalid_current_stage',
-      status: 409,
-    } satisfies Partial<DealStageMoveError>);
-    expect(repository.compareAndSetCalls).toBe(0);
-  });
-
-  it('allows only one of two concurrent moves based on the same old stage', async () => {
-    const [first, second] = await Promise.allSettled([
-      moveDealToStage(repository, input),
-      moveDealToStage(repository, { ...input, newStageId: 'stage-c' }),
-    ]);
-    const results = [first, second];
-    const fulfilled = results.filter((result) => result.status === 'fulfilled');
-    const rejected = results.find((result) => result.status === 'rejected');
-
-    expect(fulfilled).toHaveLength(1);
-    if (!rejected || rejected.status !== 'rejected') {
-      throw new Error('expected one rejected concurrent move');
-    }
-    expect(rejected.reason).toMatchObject({
       code: 'stage_conflict',
       status: 409,
-      currentStageId: repository.deals.get('deal-a')?.stage_id,
+      currentStageId: 'stage-c',
+    } satisfies Partial<DealStageMoveError>);
+  });
+
+  it('treats impossible null identifiers from the RPC as a server error', async () => {
+    const repository = repositoryReturning({
+      ok: false,
+      error: 'invalid_identifier',
     });
-    expect(repository.compareAndSetCalls).toBe(2);
+
+    await expect(moveDealToStage(repository, input)).rejects.toMatchObject({
+      code: 'database_error',
+      status: 500,
+    } satisfies Partial<DealStageMoveError>);
   });
 
-  it('does not call Meta or change attribution when entering a mapped stage', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  it.each([
+    ['stage-b', 'stage-b', 2, 0],
+    ['stage-b', 'stage-c', 1, 1],
+  ] as const)(
+    'keeps one CAS winner/event for concurrent targets %s and %s',
+    async (firstTarget, secondTarget, fulfilledCount, rejectedCount) => {
+      let arrivals = 0;
+      let release: (() => void) | undefined;
+      const bothRead = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let stageId = 'stage-a';
+      const events = new Set<string>();
 
-    const result = await moveDealToStage(repository, input);
+      const repository: DealStageRepository = {
+        async moveWithConversionIntent(request) {
+          const observedStage = stageId;
+          arrivals += 1;
+          if (arrivals === 2) release?.();
+          await bothRead;
 
-    expect(result.newStage.meta_conversion_event).toBe('LeadSubmitted');
-    expect(result.deal.meta_attribution_id).toBe('attribution-a');
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+          const eventName =
+            request.newStageId === 'stage-b'
+              ? ('LeadSubmitted' as const)
+              : ('QualifiedLead' as const);
+
+          if (stageId === observedStage) {
+            stageId = request.newStageId;
+            const eventKey = `${request.dealId}:${eventName}`;
+            const created = !events.has(eventKey);
+            events.add(eventKey);
+            return success({
+              newStageId: stageId,
+              deal: { ...success().deal, stage_id: stageId },
+              newStage: {
+                ...success().newStage,
+                id: stageId,
+                meta_conversion_event: eventName,
+              },
+              conversionEventCreated: created,
+              conversionEventName: eventName,
+            });
+          }
+
+          if (stageId === request.newStageId) {
+            return success({
+              changed: false,
+              reason: 'same_stage',
+              oldStageId: stageId,
+              newStageId: stageId,
+              deal: { ...success().deal, stage_id: stageId },
+              conversionEventCreated: false,
+              conversionEventStatus: null,
+              conversionEventName: null,
+            });
+          }
+
+          return {
+            ok: false as const,
+            error: 'stage_conflict' as const,
+            currentStageId: stageId,
+          };
+        },
+      };
+
+      const outcomes = await Promise.allSettled([
+        moveDealToStage(repository, { ...input, newStageId: firstTarget }),
+        moveDealToStage(repository, { ...input, newStageId: secondTarget }),
+      ]);
+
+      expect(
+        outcomes.filter((item) => item.status === 'fulfilled')
+      ).toHaveLength(fulfilledCount);
+      expect(
+        outcomes.filter((item) => item.status === 'rejected')
+      ).toHaveLength(rejectedCount);
+      expect(events.size).toBe(1);
+      expect(['stage-b', 'stage-c']).toContain(stageId);
+
+      if (rejectedCount === 1) {
+        const rejected = outcomes.find((item) => item.status === 'rejected');
+        expect(rejected).toMatchObject({
+          reason: {
+            code: 'stage_conflict',
+            currentStageId: stageId,
+          },
+        });
+      }
+    }
+  );
 });
 
-describe('createDealStageRepository compare-and-set', () => {
-  it('conditions the stage update on account, deal, and old stage', async () => {
-    const calls: Array<{ method: string; args: unknown[] }> = [];
-    const row = { ...deal(), stage_id: 'stage-b' };
-    const builder = {
-      update(value: unknown) {
-        calls.push({ method: 'update', args: [value] });
-        return builder;
-      },
-      eq(column: string, value: unknown) {
-        calls.push({ method: 'eq', args: [column, value] });
-        return builder;
-      },
-      select(value: string) {
-        calls.push({ method: 'select', args: [value] });
-        return builder;
-      },
-      maybeSingle() {
-        return Promise.resolve({ data: row, error: null });
-      },
-    };
-    const db = {
-      from(table: string) {
-        calls.push({ method: 'from', args: [table] });
-        return builder;
-      },
-    } as unknown as SupabaseClient;
-    const store = createDealStageRepository(db);
+describe('createDealStageRepository', () => {
+  it('invokes only the privileged atomic RPC with server-scoped identifiers', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: success(), error: null });
+    const db = { rpc } as unknown as SupabaseClient;
+    const repository = createDealStageRepository(db);
 
-    const result = await store.compareAndSetStage({
-      accountId: 'account-a',
-      dealId: 'deal-a',
-      oldStageId: 'stage-a',
-      newStageId: 'stage-b',
-    });
+    const result = await repository.moveWithConversionIntent(input);
 
-    expect(result?.stage_id).toBe('stage-b');
-    expect(calls).toContainEqual({
-      method: 'update',
-      args: [{ stage_id: 'stage-b' }],
-    });
-    expect(calls).toContainEqual({
-      method: 'eq',
-      args: ['id', 'deal-a'],
-    });
-    expect(calls).toContainEqual({
-      method: 'eq',
-      args: ['account_id', 'account-a'],
-    });
-    expect(calls).toContainEqual({
-      method: 'eq',
-      args: ['stage_id', 'stage-a'],
-    });
+    expect(result).toEqual(success());
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledWith(
+      'move_deal_to_stage_with_conversion_intent',
+      {
+        p_account_id: 'account-a',
+        p_deal_id: 'deal-a',
+        p_new_stage_id: 'stage-b',
+      }
+    );
+    expect(rpc.mock.calls[0][1]).not.toHaveProperty('actorUserId');
+  });
+
+  it('maps PostgREST failures and malformed results to database_error', async () => {
+    const failing = createDealStageRepository({
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: '42501', message: 'not returned to the client' },
+      }),
+    } as unknown as SupabaseClient);
+    const malformed = createDealStageRepository({
+      rpc: vi.fn().mockResolvedValue({ data: { ok: true }, error: null }),
+    } as unknown as SupabaseClient);
+
+    await expect(failing.moveWithConversionIntent(input)).rejects.toMatchObject(
+      {
+        code: 'database_error',
+        status: 500,
+      }
+    );
+    await expect(
+      malformed.moveWithConversionIntent(input)
+    ).rejects.toMatchObject({ code: 'database_error', status: 500 });
   });
 });

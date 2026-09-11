@@ -6,6 +6,7 @@ import {
   createDealStageRepository,
   moveDealToStage,
 } from '@/lib/deals/move-deal-stage';
+import { metaConversionsAdmin } from '@/lib/meta-conversions/admin-client';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,7 +26,7 @@ export async function PATCH(
   { params }: { params: Promise<{ dealId: string }> }
 ) {
   try {
-    const { supabase, accountId, userId } = await requireRole('agent');
+    const { accountId, userId } = await requireRole('agent');
     const { dealId } = await params;
     if (!UUID_RE.test(dealId)) {
       return NextResponse.json({ error: 'invalid_deal_id' }, { status: 400 });
@@ -38,12 +39,15 @@ export async function PATCH(
       return NextResponse.json({ error: 'invalid_stage_id' }, { status: 400 });
     }
 
-    const result = await moveDealToStage(createDealStageRepository(supabase), {
-      accountId,
-      actorUserId: userId,
-      dealId,
-      newStageId: body.stageId,
-    });
+    const result = await moveDealToStage(
+      createDealStageRepository(metaConversionsAdmin()),
+      {
+        accountId,
+        actorUserId: userId,
+        dealId,
+        newStageId: body.stageId,
+      }
+    );
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof DealStageMoveError) return errorResponse(error);

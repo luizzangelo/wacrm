@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   requireRole: vi.fn(),
+  metaConversionsAdmin: vi.fn(),
   createRepository: vi.fn(),
   moveDealToStage: vi.fn(),
 }));
@@ -22,6 +23,10 @@ vi.mock('@/lib/deals/move-deal-stage', async (importOriginal) => {
     moveDealToStage: mocks.moveDealToStage,
   };
 });
+
+vi.mock('@/lib/meta-conversions/admin-client', () => ({
+  metaConversionsAdmin: mocks.metaConversionsAdmin,
+}));
 
 import { DealStageMoveError } from '@/lib/deals/move-deal-stage';
 import { PATCH } from './route';
@@ -53,6 +58,7 @@ function patch(body: unknown, dealId = DEAL_ID) {
 
 beforeEach(() => {
   mocks.requireRole.mockReset();
+  mocks.metaConversionsAdmin.mockReset().mockReturnValue({ serviceRole: true });
   mocks.createRepository.mockReset().mockReturnValue({ repository: true });
   mocks.moveDealToStage.mockReset().mockResolvedValue({
     changed: true,
@@ -71,6 +77,7 @@ describe('PATCH /api/deals/[dealId]/stage', () => {
 
     expect(response.status).toBe(403);
     expect(mocks.requireRole).toHaveBeenCalledWith('agent');
+    expect(mocks.metaConversionsAdmin).not.toHaveBeenCalled();
     expect(mocks.moveDealToStage).not.toHaveBeenCalled();
   });
 
@@ -83,7 +90,10 @@ describe('PATCH /api/deals/[dealId]/stage', () => {
       const response = await patch({ stageId: STAGE_ID });
 
       expect(response.status).toBe(200);
-      expect(mocks.createRepository).toHaveBeenCalledWith(auth.supabase);
+      expect(mocks.metaConversionsAdmin).toHaveBeenCalledOnce();
+      expect(mocks.createRepository).toHaveBeenCalledWith({
+        serviceRole: true,
+      });
       expect(mocks.moveDealToStage).toHaveBeenCalledWith(
         { repository: true },
         {
@@ -120,6 +130,7 @@ describe('PATCH /api/deals/[dealId]/stage', () => {
     const response = await patch(body, dealId);
 
     expect(response.status).toBe(400);
+    expect(mocks.metaConversionsAdmin).not.toHaveBeenCalled();
     expect(mocks.moveDealToStage).not.toHaveBeenCalled();
   });
 
