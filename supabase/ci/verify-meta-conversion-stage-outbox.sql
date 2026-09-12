@@ -11,8 +11,6 @@ DECLARE
   v_contact_future UUID := uuid_generate_v4();
   v_contact_b UUID := uuid_generate_v4();
   v_conversation_a UUID := uuid_generate_v4();
-  v_conversation_other UUID := uuid_generate_v4();
-  v_conversation_empty UUID := uuid_generate_v4();
   v_conversation_future UUID := uuid_generate_v4();
   v_conversation_b UUID := uuid_generate_v4();
   v_pipeline_a UUID := uuid_generate_v4();
@@ -93,8 +91,6 @@ BEGIN
   INSERT INTO public.conversations (id, user_id, account_id, contact_id)
   VALUES
     (v_conversation_a, v_owner_a, v_account_a, v_contact_a),
-    (v_conversation_other, v_owner_a, v_account_a, v_contact_a),
-    (v_conversation_empty, v_owner_a, v_account_a, v_contact_a),
     (v_conversation_future, v_owner_a, v_account_a, v_contact_future),
     (v_conversation_b, v_owner_b, v_account_b, v_contact_b);
 
@@ -125,7 +121,7 @@ BEGIN
     ),
     (
       v_attribution_contact, v_account_a, v_contact_a,
-      v_conversation_other, 'stage-ctwa-contact', 'stage-waba-a',
+      NULL, 'stage-ctwa-contact', 'stage-waba-a',
       NOW() - INTERVAL '1 hour'
     ),
     (
@@ -173,7 +169,7 @@ BEGIN
     ),
     (
       v_deal_fallback, v_owner_a, v_account_a, v_pipeline_a, v_stage_none,
-      v_contact_a, v_conversation_empty, 'Contact fallback', 10, 'BRL', NULL
+      v_contact_a, NULL, 'Contact fallback', 10, 'BRL', NULL
     ),
     (
       v_deal_rollback, v_owner_a, v_account_a, v_pipeline_a, v_stage_none,
