@@ -360,8 +360,10 @@ export type MetaAttributionEnrichmentStatus = 'pending' | 'enriched' | 'failed';
 
 export type MetaConversionEventStatus =
   | 'pending'
+  | 'sending'
   | 'sent'
   | 'failed'
+  | 'delivery_unknown'
   | 'skipped_disabled'
   | 'skipped_no_attribution'
   | 'skipped_missing_config';

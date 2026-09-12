@@ -85,70 +85,100 @@ describe('Meta Conversions API client', () => {
     });
 
     expect(result).toMatchObject({
-      classification: 'PERMANENT',
+      classification: 'DELIVERY_UNKNOWN',
       httpStatus: 200,
       response: { events_received: 0 },
       errorMessage: 'Meta Conversions API did not confirm event receipt',
+      errorCode: 'delivery_unknown_ambiguous_response',
     });
   });
 
   it.each([
-    [400, 'PERMANENT'],
-    [401, 'PERMANENT'],
-    [403, 'PERMANENT'],
-    [404, 'PERMANENT'],
-    [422, 'PERMANENT'],
-    [429, 'RETRYABLE'],
-    [500, 'RETRYABLE'],
-    [503, 'RETRYABLE'],
-  ] as const)('classifies HTTP %i as %s', async (status, classification) => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonResponse(
-        {
+    [400, 'DEFINITE_REJECTION', 'meta_http_rejection'],
+    [401, 'DEFINITE_REJECTION', 'meta_http_rejection'],
+    [403, 'DEFINITE_REJECTION', 'meta_http_rejection'],
+    [404, 'DEFINITE_REJECTION', 'meta_http_rejection'],
+    [422, 'DEFINITE_REJECTION', 'meta_http_rejection'],
+    [429, 'DELIVERY_UNKNOWN', 'delivery_unknown_rate_limit'],
+    [500, 'DELIVERY_UNKNOWN', 'delivery_unknown_server_error'],
+    [503, 'DELIVERY_UNKNOWN', 'delivery_unknown_server_error'],
+  ] as const)(
+    'classifies HTTP %i as %s',
+    async (status, classification, errorCode) => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        jsonResponse(
+          {
+            error: {
+              code: status === 429 ? 613 : 100,
+              error_subcode: 33,
+              type: 'OAuthException',
+              message: `Bearer ${TOKEN} rejected ${CTWA}`,
+              fbtrace_id: 'trace-error',
+              ignored_secret: TOKEN,
+            },
+            ignored_payload: { ctwa_clid: CTWA },
+          },
+          status
+        )
+      );
+
+      const result = await sendMetaConversionEvent({
+        datasetId: 'dataset-1',
+        accessToken: TOKEN,
+        payload,
+        fetcher,
+      });
+      const serialized = JSON.stringify(result);
+
+      expect(result).toMatchObject({
+        classification,
+        errorCode,
+        httpStatus: status,
+        response: {
+          fbtrace_id: 'trace-error',
           error: {
             code: status === 429 ? 613 : 100,
             error_subcode: 33,
             type: 'OAuthException',
-            message: `Bearer ${TOKEN} rejected ${CTWA}`,
-            fbtrace_id: 'trace-error',
-            ignored_secret: TOKEN,
           },
-          ignored_payload: { ctwa_clid: CTWA },
         },
-        status
-      )
-    );
+        metaCode: status === 429 ? 613 : 100,
+        metaSubcode: 33,
+      });
+      expect(serialized).not.toContain(TOKEN);
+      expect(serialized).not.toContain(CTWA);
+      expect(serialized).not.toContain('ignored_payload');
+      expect(serialized).toContain('[redacted]');
+    }
+  );
 
-    const result = await sendMetaConversionEvent({
-      datasetId: 'dataset-1',
-      accessToken: TOKEN,
-      payload,
-      fetcher,
-    });
-    const serialized = JSON.stringify(result);
+  it('treats a Graph rate-limit code on HTTP 400 as delivery unknown', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: 4, message: 'Application request limit' } },
+          400
+        )
+      );
 
-    expect(result).toMatchObject({
-      classification,
-      httpStatus: status,
-      response: {
-        fbtrace_id: 'trace-error',
-        error: {
-          code: status === 429 ? 613 : 100,
-          error_subcode: 33,
-          type: 'OAuthException',
-        },
-      },
-      metaCode: status === 429 ? 613 : 100,
-      metaSubcode: 33,
+    await expect(
+      sendMetaConversionEvent({
+        datasetId: 'dataset-1',
+        accessToken: TOKEN,
+        payload,
+        fetcher,
+      })
+    ).resolves.toMatchObject({
+      classification: 'DELIVERY_UNKNOWN',
+      httpStatus: 400,
+      errorCode: 'delivery_unknown_rate_limit',
+      metaCode: 4,
     });
-    expect(serialized).not.toContain(TOKEN);
-    expect(serialized).not.toContain(CTWA);
-    expect(serialized).not.toContain('ignored_payload');
-    expect(serialized).toContain('[redacted]');
   });
 
   it.each(['AbortError', 'TimeoutError'])(
-    'classifies %s as a sanitized retryable timeout',
+    'classifies %s as a sanitized ambiguous timeout',
     async (name) => {
       const fetcher = vi
         .fn<typeof fetch>()
@@ -162,10 +192,11 @@ describe('Meta Conversions API client', () => {
           fetcher,
         })
       ).resolves.toEqual({
-        classification: 'RETRYABLE',
+        classification: 'DELIVERY_UNKNOWN',
         httpStatus: null,
         response: null,
         errorMessage: 'Meta Conversions API request timed out',
+        errorCode: 'delivery_unknown_timeout',
       });
     }
   );
@@ -183,16 +214,17 @@ describe('Meta Conversions API client', () => {
     });
 
     expect(result).toEqual({
-      classification: 'RETRYABLE',
+      classification: 'DELIVERY_UNKNOWN',
       httpStatus: null,
       response: null,
       errorMessage: 'Meta Conversions API network request failed',
+      errorCode: 'delivery_unknown_network',
     });
     expect(JSON.stringify(result)).not.toContain(TOKEN);
     expect(JSON.stringify(result)).not.toContain(CTWA);
   });
 
-  it('treats invalid JSON success responses as permanent failures', async () => {
+  it('treats invalid JSON success responses as delivery unknown', async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(new Response('<html>proxy</html>', { status: 200 }));
@@ -205,9 +237,10 @@ describe('Meta Conversions API client', () => {
         fetcher,
       })
     ).resolves.toMatchObject({
-      classification: 'PERMANENT',
+      classification: 'DELIVERY_UNKNOWN',
       httpStatus: 200,
       response: null,
+      errorCode: 'delivery_unknown_ambiguous_response',
     });
   });
 });

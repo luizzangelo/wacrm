@@ -35,13 +35,22 @@ export interface SanitizedMetaConversionsResponse {
 }
 
 export type MetaConversionDeliveryClassification =
-  'SUCCESS' | 'RETRYABLE' | 'PERMANENT';
+  'SUCCESS' | 'DEFINITE_REJECTION' | 'DELIVERY_UNKNOWN';
+
+export type MetaConversionDeliveryErrorCode =
+  | 'meta_http_rejection'
+  | 'delivery_unknown_ambiguous_response'
+  | 'delivery_unknown_rate_limit'
+  | 'delivery_unknown_server_error'
+  | 'delivery_unknown_timeout'
+  | 'delivery_unknown_network';
 
 export interface MetaConversionDeliveryResult {
   classification: MetaConversionDeliveryClassification;
   httpStatus: number | null;
   response: SanitizedMetaConversionsResponse | null;
   errorMessage: string | null;
+  errorCode?: MetaConversionDeliveryErrorCode;
   metaCode?: number;
   metaSubcode?: number;
 }
@@ -136,10 +145,9 @@ function sanitizeResponse(
   return Object.keys(response).length ? response : null;
 }
 
-function classifyHttpStatus(status: number): 'RETRYABLE' | 'PERMANENT' {
-  if (status === 429 || status >= 500) return 'RETRYABLE';
-  return 'PERMANENT';
-}
+const META_RATE_LIMIT_ERROR_CODES = new Set([
+  4, 17, 32, 341, 613, 80000, 80003, 80004, 80014,
+]);
 
 async function readJson(response: Response): Promise<MetaErrorEnvelope | null> {
   try {
@@ -179,12 +187,15 @@ export async function sendMetaConversionEvent(options: {
       error instanceof Error &&
       (error.name === 'AbortError' || error.name === 'TimeoutError');
     return {
-      classification: 'RETRYABLE',
+      classification: 'DELIVERY_UNKNOWN',
       httpStatus: null,
       response: null,
       errorMessage: timedOut
         ? 'Meta Conversions API request timed out'
         : 'Meta Conversions API network request failed',
+      errorCode: timedOut
+        ? 'delivery_unknown_timeout'
+        : 'delivery_unknown_network',
     };
   }
 
@@ -207,9 +218,26 @@ export async function sendMetaConversionEvent(options: {
     };
   }
 
-  const classification = response.ok
-    ? 'PERMANENT'
-    : classifyHttpStatus(response.status);
+  const metaCode = numberOrUndefined(body?.error?.code);
+  // Business Messaging does not provide server-to-server deduplication by
+  // event_id, so an ambiguous POST must never be classified as retryable.
+  const isRateLimit =
+    response.status === 429 ||
+    (metaCode !== undefined && META_RATE_LIMIT_ERROR_CODES.has(metaCode));
+  const isDefiniteRejection =
+    !response.ok &&
+    response.status >= 400 &&
+    response.status < 500 &&
+    !isRateLimit;
+  const classification: MetaConversionDeliveryClassification =
+    isDefiniteRejection ? 'DEFINITE_REJECTION' : 'DELIVERY_UNKNOWN';
+  const errorCode: MetaConversionDeliveryErrorCode = isDefiniteRejection
+    ? 'meta_http_rejection'
+    : isRateLimit
+      ? 'delivery_unknown_rate_limit'
+      : response.status >= 500
+        ? 'delivery_unknown_server_error'
+        : 'delivery_unknown_ambiguous_response';
   const metaMessage = sanitizeText(body?.error?.message, secrets);
   return {
     classification,
@@ -220,7 +248,8 @@ export async function sendMetaConversionEvent(options: {
       (response.ok
         ? 'Meta Conversions API did not confirm event receipt'
         : `Meta Conversions API HTTP ${response.status}`),
-    metaCode: numberOrUndefined(body?.error?.code),
+    errorCode,
+    metaCode,
     metaSubcode: numberOrUndefined(body?.error?.error_subcode),
   };
 }

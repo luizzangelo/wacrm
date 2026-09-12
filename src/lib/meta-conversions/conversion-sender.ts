@@ -6,7 +6,6 @@ import { decrypt } from '@/lib/whatsapp/encryption';
 import {
   META_CONVERSION_EVENT_BATCH_SIZE,
   META_CONVERSION_EVENT_CLAIM_LEASE_MS,
-  META_CONVERSION_EVENT_MAX_ATTEMPTS,
 } from './constants';
 import {
   sanitizeMetaConversionText,
@@ -51,7 +50,7 @@ export interface MetaConversionCandidate {
 }
 
 interface DeliveryPersistence {
-  status: 'pending' | 'sent' | 'failed';
+  status: 'sent' | 'failed' | 'delivery_unknown';
   sent_at: string | null;
   meta_http_status: number | null;
   meta_response: SanitizedMetaConversionsResponse | null;
@@ -77,6 +76,7 @@ export interface MetaConversionEventRepository {
     status: Extract<
       MetaConversionEventStatus,
       | 'failed'
+      | 'delivery_unknown'
       | 'skipped_disabled'
       | 'skipped_missing_config'
       | 'skipped_no_attribution'
@@ -94,13 +94,14 @@ export interface MetaConversionEventRepository {
     attempt: number,
     result: DeliveryPersistence
   ): Promise<boolean>;
+  recoverStaleSending(staleBefore: string): Promise<number>;
   listPending(limit: number): Promise<MetaConversionCandidate[]>;
 }
 
 export type MetaConversionProcessingResult =
   | { status: 'sent'; attempt: number }
-  | { status: 'pending'; attempt: number }
   | { status: 'failed'; attempt: number | null }
+  | { status: 'delivery_unknown'; attempt: number | null }
   | {
       status:
         | 'skipped_disabled'
@@ -112,10 +113,11 @@ export type MetaConversionProcessingResult =
   | { status: 'not_found' };
 
 export interface MetaConversionBatchResult {
+  recovered_sending: number;
   scanned: number;
   sent: number;
-  pending: number;
   failed: number;
+  delivery_unknown: number;
   skipped_disabled: number;
   skipped_missing_config: number;
   skipped_no_attribution: number;
@@ -198,13 +200,17 @@ export function createMetaConversionEventRepository(
     ) {
       const { data, error } = await db
         .from('meta_conversion_events')
-        .update({
-          status,
-          meta_http_status: null,
-          meta_response: null,
-          error_message: errorMessage,
-          sent_at: null,
-        })
+        .update(
+          status === 'delivery_unknown'
+            ? { status, error_message: errorMessage }
+            : {
+                status,
+                meta_http_status: null,
+                meta_response: null,
+                error_message: errorMessage,
+                sent_at: null,
+              }
+        )
         .eq('id', eventId)
         .eq('account_id', accountId)
         .eq('status', 'pending')
@@ -218,7 +224,11 @@ export function createMetaConversionEventRepository(
     async claimAttempt(accountId, eventId, expectedAttempts) {
       const { data, error } = await db
         .from('meta_conversion_events')
-        .update({ attempts: expectedAttempts + 1 })
+        .update({
+          status: 'sending',
+          attempts: expectedAttempts + 1,
+          error_message: null,
+        })
         .eq('id', eventId)
         .eq('account_id', accountId)
         .eq('status', 'pending')
@@ -235,12 +245,26 @@ export function createMetaConversionEventRepository(
         .update(result)
         .eq('id', eventId)
         .eq('account_id', accountId)
-        .eq('status', 'pending')
+        .eq('status', 'sending')
         .eq('attempts', attempt)
         .select('id')
         .maybeSingle();
       assertDatabaseResult('persist_attempt_result', error);
       return data !== null;
+    },
+
+    async recoverStaleSending(staleBefore) {
+      const { data, error } = await db
+        .from('meta_conversion_events')
+        .update({
+          status: 'delivery_unknown',
+          error_message: 'delivery_unknown_worker_crash',
+        })
+        .eq('status', 'sending')
+        .lt('updated_at', staleBefore)
+        .select('id');
+      assertDatabaseResult('recover_stale_sending', error);
+      return data?.length ?? 0;
     },
 
     async listPending(limit) {
@@ -260,15 +284,6 @@ export function createMetaConversionEventRepository(
 
 function isNonEmpty(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function hasActiveClaim(event: StoredMetaConversionEvent, now: Date): boolean {
-  if (event.attempts === 0) return false;
-  const updatedAt = Date.parse(event.updated_at);
-  return (
-    Number.isFinite(updatedAt) &&
-    now.getTime() - updatedAt < META_CONVERSION_EVENT_CLAIM_LEASE_MS
-  );
 }
 
 function parsePurchaseValue(value: number | string | null): number | null {
@@ -331,7 +346,7 @@ function logResult(
   event: StoredMetaConversionEvent,
   attempt: number,
   result: MetaConversionDeliveryResult,
-  persistedStatus: 'pending' | 'sent' | 'failed'
+  persistedStatus: 'sent' | 'failed' | 'delivery_unknown'
 ): void {
   console.info('[meta-conversions][send]', {
     account_id: event.account_id,
@@ -352,6 +367,7 @@ async function markPreflight(
   status: Extract<
     MetaConversionEventStatus,
     | 'failed'
+    | 'delivery_unknown'
     | 'skipped_disabled'
     | 'skipped_missing_config'
     | 'skipped_no_attribution'
@@ -366,7 +382,9 @@ async function markPreflight(
     error
   );
   if (!updated) return { status: 'busy' };
-  return status === 'failed' ? { status: 'failed', attempt: null } : { status };
+  return status === 'failed' || status === 'delivery_unknown'
+    ? { status, attempt: null }
+    : { status };
 }
 
 export async function processMetaConversionEvent(options: {
@@ -394,16 +412,17 @@ export async function processMetaConversionEvent(options: {
   if (!event) return { status: 'not_found' };
   if (event.status !== 'pending') return { status: 'ignored' };
 
-  if (event.attempts >= META_CONVERSION_EVENT_MAX_ATTEMPTS) {
+  // Stage 12 may have persisted an attempted POST as pending. Business
+  // Messaging does not deduplicate repeated server events by event_id, so a
+  // legacy attempted row is quarantined instead of being sent again.
+  if (event.attempts > 0) {
     return markPreflight(
       repository,
       event,
-      'failed',
-      'maximum_delivery_attempts_reached'
+      'delivery_unknown',
+      'delivery_unknown_previous_attempt'
     );
   }
-
-  if (hasActiveClaim(event, now())) return { status: 'busy' };
 
   const config = await repository.getConfig(accountId);
   if (
@@ -490,18 +509,30 @@ export async function processMetaConversionEvent(options: {
   );
   if (!claimed) return { status: 'busy' };
 
-  const delivery = await deliver({
-    datasetId: config.dataset_id,
-    accessToken,
-    payload,
-  });
+  let delivery: MetaConversionDeliveryResult;
+  try {
+    delivery = await deliver({
+      datasetId: config.dataset_id,
+      accessToken,
+      payload,
+    });
+  } catch {
+    // Defensively treat a custom/throwing transport exactly like fetch's
+    // ambiguous network path; the claim proves an HTTP attempt may have begun.
+    delivery = {
+      classification: 'DELIVERY_UNKNOWN',
+      httpStatus: null,
+      response: null,
+      errorMessage: 'Meta Conversions API transport failed',
+      errorCode: 'delivery_unknown_network',
+    };
+  }
   const status =
     delivery.classification === 'SUCCESS'
       ? 'sent'
-      : delivery.classification === 'PERMANENT' ||
-          attempt >= META_CONVERSION_EVENT_MAX_ATTEMPTS
+      : delivery.classification === 'DEFINITE_REJECTION'
         ? 'failed'
-        : 'pending';
+        : 'delivery_unknown';
   const persisted = await repository.persistAttemptResult(
     accountId,
     eventDbId,
@@ -514,11 +545,13 @@ export async function processMetaConversionEvent(options: {
       error_message:
         status === 'sent'
           ? null
-          : sanitizeMetaConversionText(delivery.errorMessage, [
-              accessToken,
-              config.access_token,
-              attribution.ctwa_clid,
-            ]),
+          : status === 'delivery_unknown'
+            ? (delivery.errorCode ?? 'delivery_unknown_ambiguous_response')
+            : sanitizeMetaConversionText(delivery.errorMessage, [
+                accessToken,
+                config.access_token,
+                attribution.ctwa_clid,
+              ]),
     }
   );
   logResult(event, attempt, delivery, status);
@@ -532,14 +565,24 @@ export async function processMetaConversionEventBatch(options: {
   processOne?: (
     candidate: MetaConversionCandidate
   ) => Promise<MetaConversionProcessingResult>;
+  now?: () => Date;
 }): Promise<MetaConversionBatchResult> {
-  const { repository, batchSize = META_CONVERSION_EVENT_BATCH_SIZE } = options;
+  const {
+    repository,
+    batchSize = META_CONVERSION_EVENT_BATCH_SIZE,
+    now = () => new Date(),
+  } = options;
+  const staleBefore = new Date(
+    now().getTime() - META_CONVERSION_EVENT_CLAIM_LEASE_MS
+  ).toISOString();
+  const recoveredSending = await repository.recoverStaleSending(staleBefore);
   const candidates = await repository.listPending(batchSize);
   const summary: MetaConversionBatchResult = {
+    recovered_sending: recoveredSending,
     scanned: candidates.length,
     sent: 0,
-    pending: 0,
     failed: 0,
+    delivery_unknown: recoveredSending,
     skipped_disabled: 0,
     skipped_missing_config: 0,
     skipped_no_attribution: 0,

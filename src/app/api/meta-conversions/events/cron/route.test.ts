@@ -35,10 +35,11 @@ beforeEach(() => {
   process.env.AUTOMATION_CRON_SECRET = 'cron-secret';
   h.createMetaConversionEventRepository.mockReturnValue(h.repository);
   h.processMetaConversionEventBatch.mockResolvedValue({
+    recovered_sending: 1,
     scanned: 3,
     sent: 1,
-    pending: 1,
     failed: 1,
+    delivery_unknown: 2,
     skipped_disabled: 0,
     skipped_missing_config: 0,
     skipped_no_attribution: 0,
@@ -84,7 +85,13 @@ describe('Meta conversion delivery cron', () => {
     expect(h.processMetaConversionEventBatch).toHaveBeenCalledWith({
       repository: h.repository,
     });
-    expect(response.body).toMatchObject({ scanned: 3, sent: 1, failed: 1 });
+    expect(response.body).toMatchObject({
+      recovered_sending: 1,
+      scanned: 3,
+      sent: 1,
+      failed: 1,
+      delivery_unknown: 2,
+    });
   });
 
   it('does not expose thrown secrets in logs or response', async () => {

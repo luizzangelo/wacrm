@@ -78,6 +78,7 @@ class MemoryRepository implements MetaConversionEventRepository {
   ];
   attemptResults: Array<Record<string, unknown>> = [];
   preflightWrites: Array<Record<string, unknown>> = [];
+  recoveryWrites: Array<Record<string, unknown>> = [];
   claims = 0;
 
   constructor(storedEvent = event()) {
@@ -138,6 +139,7 @@ class MemoryRepository implements MetaConversionEventRepository {
     ) {
       return false;
     }
+    this.storedEvent.status = 'sending';
     this.storedEvent.attempts++;
     this.claims++;
     return true;
@@ -152,7 +154,7 @@ class MemoryRepository implements MetaConversionEventRepository {
     if (
       accountId !== this.storedEvent.account_id ||
       eventId !== this.storedEvent.id ||
-      this.storedEvent.status !== 'pending' ||
+      this.storedEvent.status !== 'sending' ||
       this.storedEvent.attempts !== attempt
     ) {
       return false;
@@ -160,6 +162,22 @@ class MemoryRepository implements MetaConversionEventRepository {
     this.storedEvent.status = result.status;
     this.attemptResults.push({ attempt, ...result });
     return true;
+  }
+
+  async recoverStaleSending(staleBefore: string) {
+    if (
+      this.storedEvent.status !== 'sending' ||
+      Date.parse(this.storedEvent.updated_at) >= Date.parse(staleBefore)
+    ) {
+      return 0;
+    }
+    this.storedEvent.status = 'delivery_unknown';
+    this.recoveryWrites.push({
+      status: 'delivery_unknown',
+      error_message: 'delivery_unknown_worker_crash',
+      staleBefore,
+    });
+    return 1;
   }
 
   async listPending(limit: number) {
@@ -280,6 +298,7 @@ describe('Meta conversion event processing', () => {
     const repository = new MemoryRepository();
     const deliver = vi.fn().mockImplementation(async () => {
       expect(repository.storedEvent.attempts).toBe(1);
+      expect(repository.storedEvent.status).toBe('sending');
       return success;
     });
 
@@ -395,79 +414,82 @@ describe('Meta conversion event processing', () => {
     expect(deliver).toHaveBeenCalledTimes(1);
   });
 
-  it('does not claim N+1 while a recent N claim can still be in flight', async () => {
+  it('quarantines a legacy pending row with a prior attempt without HTTP', async () => {
     const repository = new MemoryRepository(
       event({ attempts: 1, updated_at: '2026-09-11T12:39:50.000Z' })
     );
     const deliver = vi.fn();
 
     await expect(processOne(repository, deliver)).resolves.toEqual({
-      status: 'busy',
+      status: 'delivery_unknown',
+      attempt: null,
     });
     expect(repository.claims).toBe(0);
     expect(deliver).not.toHaveBeenCalled();
+    expect(repository.storedEvent.attempts).toBe(1);
+    expect(repository.preflightWrites[0]).toMatchObject({
+      status: 'delivery_unknown',
+      errorMessage: 'delivery_unknown_previous_attempt',
+    });
   });
 
-  it('keeps a retryable failure pending below the limit', async () => {
-    const repository = new MemoryRepository(event({ attempts: 1 }));
-    const deliver = vi.fn().mockResolvedValue({
-      classification: 'RETRYABLE',
-      httpStatus: 503,
-      response: { error: { code: 1, type: 'OAuthException' } },
-      errorMessage: 'Meta Conversions API HTTP 503',
-      metaCode: 1,
-    } satisfies MetaConversionDeliveryResult);
+  it.each([
+    [null, null, 'delivery_unknown_timeout'],
+    [null, null, 'delivery_unknown_network'],
+    [503, { error: { code: 1 } }, 'delivery_unknown_server_error'],
+    [429, { error: { code: 613 } }, 'delivery_unknown_rate_limit'],
+  ] as const)(
+    'persists an ambiguous attempt as delivery_unknown (%s/%s/%s)',
+    async (httpStatus, response, errorCode) => {
+      const repository = new MemoryRepository();
+      const deliver = vi.fn().mockResolvedValue({
+        classification: 'DELIVERY_UNKNOWN',
+        httpStatus,
+        response,
+        errorMessage: 'ambiguous response with a secret',
+        errorCode,
+      } satisfies MetaConversionDeliveryResult);
+
+      await expect(processOne(repository, deliver)).resolves.toEqual({
+        status: 'delivery_unknown',
+        attempt: 1,
+      });
+      expect(repository.attemptResults[0]).toMatchObject({
+        attempt: 1,
+        status: 'delivery_unknown',
+        sent_at: null,
+        meta_http_status: httpStatus,
+        meta_response: response,
+        error_message: errorCode,
+      });
+
+      await expect(processOne(repository, deliver)).resolves.toEqual({
+        status: 'ignored',
+      });
+      expect(deliver).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('turns an unexpected transport throw into delivery_unknown', async () => {
+    const repository = new MemoryRepository();
+    const deliver = vi.fn().mockRejectedValue(new Error('secret transport'));
 
     await expect(processOne(repository, deliver)).resolves.toEqual({
-      status: 'pending',
-      attempt: 2,
+      status: 'delivery_unknown',
+      attempt: 1,
     });
     expect(repository.attemptResults[0]).toMatchObject({
-      attempt: 2,
-      status: 'pending',
-      sent_at: null,
-      meta_http_status: 503,
+      status: 'delivery_unknown',
+      error_message: 'delivery_unknown_network',
     });
-  });
-
-  it('turns the third retryable failure into failed', async () => {
-    const repository = new MemoryRepository(event({ attempts: 2 }));
-    const deliver = vi.fn().mockResolvedValue({
-      classification: 'RETRYABLE',
-      httpStatus: null,
-      response: null,
-      errorMessage: 'Meta Conversions API request timed out',
-    } satisfies MetaConversionDeliveryResult);
-
-    await expect(processOne(repository, deliver)).resolves.toEqual({
-      status: 'failed',
-      attempt: 3,
-    });
-    expect(repository.attemptResults[0]).toMatchObject({
-      status: 'failed',
-      sent_at: null,
-      meta_http_status: null,
-    });
-  });
-
-  it('fails stale pending rows already at the maximum without HTTP', async () => {
-    const repository = new MemoryRepository(event({ attempts: 3 }));
-    const deliver = vi.fn();
-
-    await expect(processOne(repository, deliver)).resolves.toEqual({
-      status: 'failed',
-      attempt: null,
-    });
-    expect(deliver).not.toHaveBeenCalled();
-    expect(repository.storedEvent.attempts).toBe(3);
   });
 
   it.each([400, 401, 403, 404])(
-    'fails permanent HTTP %i errors on their first real request',
+    'fails definite HTTP %i rejections on their first real request',
     async (httpStatus) => {
       const repository = new MemoryRepository();
       const deliver = vi.fn().mockResolvedValue({
-        classification: 'PERMANENT',
+        classification: 'DEFINITE_REJECTION',
         httpStatus,
         response: { error: { code: 100, error_subcode: 33 } },
         errorMessage:
@@ -496,7 +518,9 @@ describe('Meta conversion event processing', () => {
 
   it.each([
     'sent',
+    'sending',
     'failed',
+    'delivery_unknown',
     'skipped_disabled',
     'skipped_missing_config',
     'skipped_no_attribution',
@@ -511,16 +535,16 @@ describe('Meta conversion event processing', () => {
     expect(repository.claims).toBe(0);
   });
 
-  it('uses the same snapshot event_id on a later retry', async () => {
+  it('uses the exact persisted event_id on the single automatic attempt', async () => {
     const repository = new MemoryRepository(
-      event({ attempts: 1, event_id: 'immutable-retry-event-id' })
+      event({ event_id: 'immutable-audit-event-id' })
     );
     const deliver = vi.fn().mockResolvedValue(success);
 
     await processOne(repository, deliver);
 
     expect(deliver.mock.calls[0][0].payload.data[0].event_id).toBe(
-      'immutable-retry-event-id'
+      'immutable-audit-event-id'
     );
     expect(deliver.mock.calls[0][0].payload.data[0].event_time).toBe(
       1_789_130_096
@@ -579,6 +603,7 @@ describe('Meta conversion event processing', () => {
 describe('Meta conversion event batch', () => {
   it('processes a bounded list sequentially and isolates item failures', async () => {
     const repository = new MemoryRepository();
+    repository.recoveryWrites = [];
     repository.pendingCandidates = [
       { id: 'oldest', account_id: 'a' },
       { id: 'middle', account_id: 'b' },
@@ -598,10 +623,11 @@ describe('Meta conversion event batch', () => {
 
     expect(order).toEqual(['oldest', 'middle']);
     expect(summary).toEqual({
+      recovered_sending: 0,
       scanned: 2,
       sent: 1,
-      pending: 0,
       failed: 0,
+      delivery_unknown: 0,
       skipped_disabled: 0,
       skipped_missing_config: 0,
       skipped_no_attribution: 0,
@@ -611,9 +637,133 @@ describe('Meta conversion event batch', () => {
       errors: 1,
     });
   });
+
+  it('quarantines stale sending before listing pending work', async () => {
+    const repository = new MemoryRepository(
+      event({
+        status: 'sending',
+        attempts: 1,
+        updated_at: '2026-09-11T12:39:00.000Z',
+      })
+    );
+    repository.pendingCandidates = [];
+    const processOne = vi.fn();
+
+    const summary = await processMetaConversionEventBatch({
+      repository,
+      processOne,
+      now: () => new Date('2026-09-11T12:40:00.000Z'),
+    });
+
+    expect(repository.storedEvent.status).toBe('delivery_unknown');
+    expect(repository.storedEvent.attempts).toBe(1);
+    expect(repository.recoveryWrites[0]).toMatchObject({
+      error_message: 'delivery_unknown_worker_crash',
+      staleBefore: '2026-09-11T12:39:30.000Z',
+    });
+    expect(processOne).not.toHaveBeenCalled();
+    expect(summary.recovered_sending).toBe(1);
+    expect(summary.delivery_unknown).toBe(1);
+  });
+
+  it('leaves recent sending untouched and does not send it', async () => {
+    const repository = new MemoryRepository(
+      event({
+        status: 'sending',
+        attempts: 1,
+        updated_at: '2026-09-11T12:39:45.000Z',
+      })
+    );
+    repository.pendingCandidates = [];
+    const processOne = vi.fn();
+
+    const summary = await processMetaConversionEventBatch({
+      repository,
+      processOne,
+      now: () => new Date('2026-09-11T12:40:00.000Z'),
+    });
+
+    expect(repository.storedEvent.status).toBe('sending');
+    expect(repository.recoveryWrites).toEqual([]);
+    expect(processOne).not.toHaveBeenCalled();
+    expect(summary.recovered_sending).toBe(0);
+    expect(summary.delivery_unknown).toBe(0);
+  });
 });
 
 describe('Meta conversion repository selection', () => {
+  it('claims with one pending-to-sending compare-and-set', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: EVENT_DB_ID },
+      error: null,
+    });
+    const query = {
+      update: vi.fn(),
+      eq: vi.fn(),
+      select: vi.fn(),
+      maybeSingle,
+    };
+    query.update.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    query.select.mockReturnValue(query);
+    const db = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      createMetaConversionEventRepository(db).claimAttempt(
+        ACCOUNT,
+        EVENT_DB_ID,
+        0
+      )
+    ).resolves.toBe(true);
+
+    expect(query.update).toHaveBeenCalledWith({
+      status: 'sending',
+      attempts: 1,
+      error_message: null,
+    });
+    expect(query.eq.mock.calls).toEqual([
+      ['id', EVENT_DB_ID],
+      ['account_id', ACCOUNT],
+      ['status', 'pending'],
+      ['attempts', 0],
+    ]);
+    expect(query.select).toHaveBeenCalledWith('id');
+  });
+
+  it('recovers only stale sending rows without clearing audit fields', async () => {
+    const select = vi.fn().mockResolvedValue({
+      data: [{ id: EVENT_DB_ID }],
+      error: null,
+    });
+    const query = {
+      update: vi.fn(),
+      eq: vi.fn(),
+      lt: vi.fn(),
+      select,
+    };
+    query.update.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    query.lt.mockReturnValue(query);
+    const db = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient;
+    const cutoff = '2026-09-11T12:39:30.000Z';
+
+    await expect(
+      createMetaConversionEventRepository(db).recoverStaleSending(cutoff)
+    ).resolves.toBe(1);
+
+    expect(query.update).toHaveBeenCalledWith({
+      status: 'delivery_unknown',
+      error_message: 'delivery_unknown_worker_crash',
+    });
+    expect(query.eq).toHaveBeenCalledWith('status', 'sending');
+    expect(query.lt).toHaveBeenCalledWith('updated_at', cutoff);
+    expect(query.select).toHaveBeenCalledWith('id');
+  });
+
   it('selects only pending rows in deterministic oldest-first order', async () => {
     const limit = vi.fn().mockResolvedValue({
       data: [{ id: EVENT_DB_ID, account_id: ACCOUNT }],
