@@ -32,7 +32,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_config_id_account
 -- be saved without placeholder secrets.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.meta_conversion_config (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL,
   dataset_id TEXT,
   access_token TEXT,
@@ -63,7 +63,7 @@ COMMENT ON COLUMN public.meta_conversion_config.marketing_access_token IS
 -- receiver even if whatsapp_config is later replaced or deleted.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.meta_ad_attributions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL,
   contact_id UUID,
   conversation_id UUID,
@@ -236,7 +236,7 @@ CREATE INDEX IF NOT EXISTS idx_deals_account_meta_attribution
 -- source is deleted, but event snapshots and delivery outcome remain.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.meta_conversion_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id UUID NOT NULL,
   deal_id UUID,
   contact_id UUID,
