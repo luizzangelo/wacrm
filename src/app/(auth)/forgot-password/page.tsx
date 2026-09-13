@@ -15,6 +15,12 @@ import {
 } from "@/components/ui/card";
 import { MessageSquare, CheckCircle, ArrowLeft } from "lucide-react";
 
+const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+const siteUrl = configuredSiteUrl
+  ? configuredSiteUrl.replace(/\/+$/, "")
+  : "https://crm.luizangelo.com.br";
+const passwordResetRedirectUrl = `${siteUrl}/auth/callback`;
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +34,7 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      redirectTo: passwordResetRedirectUrl,
     });
 
     if (error) {
