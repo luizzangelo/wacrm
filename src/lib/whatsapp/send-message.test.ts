@@ -196,6 +196,7 @@ vi.mock('@/lib/flows/admin-client', () => ({
 interface CapturedWrites {
   message?: Record<string, unknown>;
   conversation?: Record<string, unknown>;
+  contact?: Record<string, unknown>;
 }
 
 /**
@@ -206,11 +207,12 @@ interface CapturedWrites {
  */
 function sendPathDb(
   templateRows: unknown[],
-  captured: CapturedWrites
+  captured: CapturedWrites,
+  contactPhone = '+15551234567'
 ): SupabaseClient {
   const conversation = {
     id: 'cv-1',
-    contact: { id: 'ct-1', phone: '+15551234567' },
+    contact: { id: 'ct-1', phone: contactPhone },
   };
   const config = {
     id: 'cfg-1',
@@ -229,6 +231,7 @@ function sendPathDb(
         },
         update: (row: Record<string, unknown>) => {
           if (table === 'conversations') captured.conversation = row;
+          if (table === 'contacts') captured.contact = row;
           return builder;
         },
         maybeSingle: async () => ({ data: null, error: null }),
@@ -344,5 +347,42 @@ describe('sendMessageToConversation — template persistence (#483)', () => {
     // name rather than inventing a body.
     expect(captured.message?.content_text).toBeNull();
     expect(captured.conversation?.last_message_text).toBe('[template]');
+  });
+});
+
+describe('sendMessageToConversation — Brazilian ninth-digit fallback', () => {
+  it('tries the original first, persists only the accepted variant, and stops', async () => {
+    const captured: CapturedWrites = {};
+    const attempted: string[] = [];
+    const textSender = await import('@/lib/whatsapp/meta-api');
+    const sendTextMock = vi.mocked(textSender.sendTextMessage);
+
+    sendTextMock.mockImplementation(async ({ to }) => {
+      attempted.push(to);
+
+      if (to === '558597710664') {
+        expect(captured.contact).toBeUndefined();
+        throw new Error('(#131030) Recipient phone number not in allowed list');
+      }
+
+      expect(to).toBe('5585997710664');
+      expect(captured.contact).toBeUndefined();
+      return { messageId: 'wamid.br-success' };
+    });
+
+    const result = await sendMessageToConversation(
+      sendPathDb([], captured, '558597710664'),
+      'acct-1',
+      {
+        conversationId: 'cv-1',
+        messageType: 'text',
+        contentText: 'Test',
+      }
+    );
+
+    expect(attempted).toEqual(['558597710664', '5585997710664']);
+    expect(sendTextMock).toHaveBeenCalledTimes(2);
+    expect(captured.contact).toEqual({ phone: '5585997710664' });
+    expect(result.whatsappMessageId).toBe('wamid.br-success');
   });
 });

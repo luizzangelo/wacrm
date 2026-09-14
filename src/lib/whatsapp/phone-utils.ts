@@ -41,6 +41,26 @@ export function isValidE164(phone: string): boolean {
 }
 
 /**
+ * Return the modern Brazilian mobile-number variant when Meta supplies the
+ * legacy 8-digit subscriber form.
+ *
+ * The rule is deliberately narrow: Brazil country code (55), a two-digit
+ * area code, exactly eight subscriber digits, and a mobile-range first digit
+ * (6–9). Fixed lines, already-modern 13-digit numbers, and every other
+ * country return null.
+ */
+export function brazilianNinthDigitVariant(phone: string): string | null {
+  const normalized = normalizePhone(phone)
+
+  if (!/^55\d{10}$/.test(normalized)) return null
+
+  const subscriber = normalized.slice(4)
+  if (!/^[6-9]/.test(subscriber)) return null
+
+  return `${normalized.slice(0, 4)}9${subscriber}`
+}
+
+/**
  * Generate plausible phone number variants for retry when Meta's
  * sandbox rejects a number with error #131030 ("not in allowed list").
  *
@@ -71,7 +91,13 @@ export function phoneVariants(sanitized: string): string[] {
   // 1. Original
   push(sanitized)
 
-  // 2. Insert a 0 after each plausible country-code length
+  // 2. Brazilian mobile ninth digit. Meta may identify an inbound sender
+  // using the legacy 8-digit subscriber form; prioritize the modern E.164
+  // candidate before the generic trunk-prefix fallbacks below.
+  const brazilianVariant = brazilianNinthDigitVariant(sanitized)
+  if (brazilianVariant) push(brazilianVariant)
+
+  // 3. Insert a 0 after each plausible country-code length
   for (const ccLen of [1, 2, 3]) {
     if (sanitized.length <= ccLen) continue
     const cc = sanitized.slice(0, ccLen)
@@ -81,7 +107,7 @@ export function phoneVariants(sanitized: string): string[] {
     }
   }
 
-  // 3. Remove a leading 0 after each plausible country-code length
+  // 4. Remove a leading 0 after each plausible country-code length
   for (const ccLen of [1, 2, 3]) {
     if (sanitized.length <= ccLen + 1) continue
     const cc = sanitized.slice(0, ccLen)

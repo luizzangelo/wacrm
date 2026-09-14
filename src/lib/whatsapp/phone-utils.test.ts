@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  brazilianNinthDigitVariant,
   isRecipientNotAllowedError,
   isValidE164,
   normalizePhone,
@@ -7,6 +8,34 @@ import {
   phonesMatch,
   sanitizePhoneForMeta,
 } from "./phone-utils";
+
+describe("brazilianNinthDigitVariant", () => {
+  it("adds the ninth digit to a Brazilian 8-digit mobile subscriber", () => {
+    expect(brazilianNinthDigitVariant("558597710664")).toBe(
+      "5585997710664",
+    );
+  });
+
+  it("does not add a second ninth digit to an already-modern number", () => {
+    expect(brazilianNinthDigitVariant("5585997710664")).toBeNull();
+    expect(phoneVariants("5585997710664")).not.toContain("55859997710664");
+  });
+
+  it("does not apply the Brazilian rule to an international number", () => {
+    expect(brazilianNinthDigitVariant("37063949836")).toBeNull();
+  });
+
+  it("does not add a ninth digit to a Brazilian fixed line", () => {
+    expect(brazilianNinthDigitVariant("558532123456")).toBeNull();
+    expect(phoneVariants("558532123456")).not.toContain("5585932123456");
+  });
+
+  it("normalizes formatting before detecting the Brazilian variant", () => {
+    expect(brazilianNinthDigitVariant("+55 (85) 9771-0664")).toBe(
+      "5585997710664",
+    );
+  });
+});
 
 describe("sanitizePhoneForMeta", () => {
   it("strips +, spaces, and dashes leaving only digits", () => {
@@ -100,6 +129,13 @@ describe("phoneVariants", () => {
   it("always lists the original number first", () => {
     const out = phoneVariants("37063949836");
     expect(out[0]).toBe("37063949836");
+  });
+
+  it("prioritizes the Brazilian ninth-digit variant after the original", () => {
+    expect(phoneVariants("558597710664").slice(0, 2)).toEqual([
+      "558597710664",
+      "5585997710664",
+    ]);
   });
 
   it("inserts a trunk 0 after each plausible country-code length", () => {
