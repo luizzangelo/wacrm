@@ -104,6 +104,12 @@ interface WhatsAppWebhookEntry {
         status: string
         timestamp: string
         recipient_id: string
+        errors?: Array<{
+          code?: string | number
+          title?: string
+          message?: string
+          error_data?: { details?: string }
+        }>
       }>
     }
     field: string
@@ -262,7 +268,7 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
       // Handle status updates
       if (value.statuses) {
         for (const status of value.statuses) {
-          await handleStatusUpdate(status)
+          await handleStatusUpdate(status, value.metadata.phone_number_id)
         }
       }
 
@@ -384,12 +390,91 @@ function isValidStatusTransition(current: string, incoming: string): boolean {
   return ii > ci
 }
 
-async function handleStatusUpdate(status: {
+interface WhatsAppStatusUpdate {
   id: string
   status: string
   timestamp: string
   recipient_id: string
-}) {
+  errors?: Array<{
+    code?: string | number
+    title?: string
+    message?: string
+    error_data?: { details?: string }
+  }>
+}
+
+const STATUS_LOG_SECRET_KEYS = [
+  'META_APP_SECRET',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'ENCRYPTION_KEY',
+  'AUTOMATION_CRON_SECRET',
+] as const
+
+/** Redact credential-shaped fragments before error text reaches stdout. */
+function sanitizeStatusLogText(value: string): string {
+  let sanitized = value
+
+  for (const key of STATUS_LOG_SECRET_KEYS) {
+    const secret = process.env[key]
+    if (secret) sanitized = sanitized.split(secret).join('[REDACTED]')
+  }
+
+  return sanitized
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(
+      /\b(Authorization|access[ _-]?token|app[ _-]?secret|verify[ _-]?token|service[ _-]?role[ _-]?key|encryption[ _-]?key|cron[ _-]?secret|cookie)\b\s*[:=]?\s*[^\s,;]+/gi,
+      '$1=[REDACTED]'
+    )
+    .replace(/\bEAA[A-Za-z0-9_-]{10,}\b/g, '[REDACTED]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED]')
+    .slice(0, 500)
+}
+
+function sanitizeStatusErrors(errors: WhatsAppStatusUpdate['errors']) {
+  return errors?.map((error) => ({
+    ...(error.code !== undefined && {
+      code:
+        typeof error.code === 'number'
+          ? error.code
+          : sanitizeStatusLogText(error.code),
+    }),
+    ...(error.title !== undefined && {
+      title: sanitizeStatusLogText(error.title),
+    }),
+    ...(error.message !== undefined && {
+      message: sanitizeStatusLogText(error.message),
+    }),
+    ...(error.error_data?.details !== undefined && {
+      error_data: {
+        details: sanitizeStatusLogText(error.error_data.details),
+      },
+    }),
+  }))
+}
+
+function logUnmatchedStatus(
+  status: WhatsAppStatusUpdate,
+  phoneNumberId: string
+) {
+  const recipientDigits = status.recipient_id.replace(/\D/g, '')
+  const sanitizedErrors = sanitizeStatusErrors(status.errors)
+
+  console.warn({
+    event: 'whatsapp_unmatched_status',
+    status: sanitizeStatusLogText(status.status),
+    timestamp: /^\d+$/.test(status.timestamp) ? status.timestamp : 'invalid',
+    message_id: status.id.slice(-8),
+    recipient_digit_count: recipientDigits.length,
+    recipient_last4: recipientDigits.slice(-4),
+    phone_number_id: /^\d+$/.test(phoneNumberId) ? phoneNumberId : 'invalid',
+    ...(sanitizedErrors?.length ? { errors: sanitizedErrors } : {}),
+  })
+}
+
+async function handleStatusUpdate(
+  status: WhatsAppStatusUpdate,
+  phoneNumberId: string
+) {
   // 1) Mirror onto messages (legacy behavior) — Meta's status values
   //    already match the CHECK constraint on messages.status. No
   //    `.select()`: message_id is NOT unique (migration 009 — Meta ids
@@ -469,6 +554,15 @@ async function handleStatusUpdate(status: {
         }
       )
     }
+  }
+
+  // Meta can originate sends outside WACRM (for example from its API
+  // Configuration screen). Their wamids have no local message/recipient
+  // row to update, but the terminal delivery outcome still needs to be
+  // observable. Keep this stdout-only and deliberately omit full recipient
+  // and message identifiers; no new database record is created.
+  if (!recipient && !msgRow) {
+    logUnmatchedStatus(status, phoneNumberId)
   }
 }
 

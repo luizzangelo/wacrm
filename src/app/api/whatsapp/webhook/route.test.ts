@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Shared, hoisted state the module mocks close over. Reset per test.
 const h = vi.hoisted(() => ({
@@ -32,6 +32,12 @@ const h = vi.hoisted(() => ({
     }[],
     /** Error the next storage upload resolves with, if any. */
     storageUploadError: null as { message: string } | null,
+    statusMessageRow: null as {
+      conversation_id: string
+      conversations: { account_id: string }
+    } | null,
+    statusRecipientRow: null as { id: string; status: string } | null,
+    messageStatusUpdates: [] as { status: string; messageId: string }[],
   },
 }))
 
@@ -88,18 +94,29 @@ vi.mock('@supabase/supabase-js', () => ({
         case 'broadcast_recipients':
           // flagBroadcastReplyIfAny: select().eq().eq().in().order().limit()
           return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  in: () => ({
-                    order: () => ({
-                      limit: () =>
-                        Promise.resolve({ data: [], error: null }),
+            select: (columns: string) =>
+              columns === 'id, status'
+                ? {
+                    eq: () => ({
+                      maybeSingle: () =>
+                        Promise.resolve({
+                          data: h.state.statusRecipientRow,
+                          error: null,
+                        }),
                     }),
-                  }),
-                }),
-              }),
-            }),
+                  }
+                : ({
+                    eq: () => ({
+                      eq: () => ({
+                        in: () => ({
+                          order: () => ({
+                            limit: () =>
+                              Promise.resolve({ data: [], error: null }),
+                          }),
+                        }),
+                      }),
+                    }),
+                  } as never),
           }
         case 'messages':
           return {
@@ -118,6 +135,18 @@ vi.mock('@supabase/supabase-js', () => ({
                         }),
                     }),
                   }
+                : _columns === 'conversation_id, conversations(account_id)'
+                  ? {
+                      eq: () => ({
+                        limit: () => ({
+                          maybeSingle: () =>
+                            Promise.resolve({
+                              data: h.state.statusMessageRow,
+                              error: null,
+                            }),
+                        }),
+                      }),
+                    }
                 : // lookupInternalIdByMetaId: select('id').eq().eq().maybeSingle()
                   {
                     eq: () => ({
@@ -130,6 +159,15 @@ vi.mock('@supabase/supabase-js', () => ({
                       }),
                     }),
                   },
+            update: (row: { status: string }) => ({
+              eq: (_column: string, messageId: string) => {
+                h.state.messageStatusUpdates.push({
+                  status: row.status,
+                  messageId,
+                })
+                return Promise.resolve({ error: null })
+              },
+            }),
             // Idempotent insert: upsert(...).select('id')
             upsert: (row: Record<string, unknown>, options: unknown) => {
               h.state.upsertCalls.push({ row, options })
@@ -277,6 +315,9 @@ beforeEach(() => {
   h.state.mirrorInboundMedia = true
   h.state.storageUploads = []
   h.state.storageUploadError = null
+  h.state.statusMessageRow = null
+  h.state.statusRecipientRow = null
+  h.state.messageStatusUpdates = []
   mockGetMediaUrl.mockResolvedValue({
     url: 'https://lookaside.fbsbx.com/whatsapp/abc',
     mimeType: 'image/jpeg',
@@ -303,6 +344,149 @@ beforeEach(() => {
         resolve()
       }, 0)
     })
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
+describe('WhatsApp webhook: unmatched delivery-status observability', () => {
+  function statusRequest(status: Record<string, unknown>) {
+    return {
+      text: async () =>
+        JSON.stringify({
+          entry: [
+            {
+              changes: [
+                {
+                  field: 'messages',
+                  value: {
+                    metadata: { phone_number_id: '108261528923943' },
+                    statuses: [status],
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      headers: { get: () => 'sha256=stub' },
+    } as unknown as Request
+  }
+
+  async function runStatusWebhook(status: Record<string, unknown>) {
+    const res = await POST(statusRequest(status))
+    for (const cb of h.state.afterCallbacks) await cb()
+    return res
+  }
+
+  it('logs a failed unmatched status with only sanitized diagnostic fields', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fullRecipient = '5585997710664'
+    const fullMessageId = 'wamid.UNMATCHED-12345678'
+    vi.stubEnv('META_APP_SECRET', 'ACTUAL_META_APP_SECRET_VALUE')
+
+    const response = await runStatusWebhook({
+      id: fullMessageId,
+      status: 'failed',
+      timestamp: '1789390800',
+      recipient_id: fullRecipient,
+      errors: [
+        {
+          code: 131026,
+          title: 'Message undeliverable',
+          message: 'Authorization: Bearer NEVER_LOG_THIS_TOKEN',
+          error_data: {
+            details:
+              'Recipient unavailable; ACTUAL_META_APP_SECRET_VALUE app_secret=NEVER_LOG_THIS_SECRET',
+          },
+        },
+      ],
+    })
+
+    expect(response).toEqual({ body: { status: 'received' }, init: { status: 200 } })
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'whatsapp_unmatched_status',
+        status: 'failed',
+        timestamp: '1789390800',
+        message_id: '12345678',
+        recipient_digit_count: 13,
+        recipient_last4: '0664',
+        phone_number_id: '108261528923943',
+        errors: [
+          {
+            code: 131026,
+            title: 'Message undeliverable',
+            message: 'Authorization=[REDACTED] [REDACTED]',
+            error_data: {
+              details:
+                'Recipient unavailable; [REDACTED] app_secret=[REDACTED]',
+            },
+          },
+        ],
+      })
+    )
+
+    const serializedLog = JSON.stringify(warnSpy.mock.calls)
+    expect(serializedLog).toContain('131026')
+    expect(serializedLog).toContain('Message undeliverable')
+    expect(serializedLog).toContain('Recipient unavailable')
+    expect(serializedLog).not.toContain(fullRecipient)
+    expect(serializedLog).not.toContain(fullMessageId)
+    expect(serializedLog).not.toContain('ACTUAL_META_APP_SECRET_VALUE')
+    expect(serializedLog).not.toContain('NEVER_LOG_THIS_TOKEN')
+    expect(serializedLog).not.toContain('NEVER_LOG_THIS_SECRET')
+  })
+
+  it('logs a delivered unmatched status', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await runStatusWebhook({
+      id: 'wamid.UNMATCHED-87654321',
+      status: 'delivered',
+      timestamp: '1789390860',
+      recipient_id: '5585997710664',
+    })
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'whatsapp_unmatched_status',
+        status: 'delivered',
+        message_id: '87654321',
+      })
+    )
+  })
+
+  it('keeps correlated message status behavior and emits no unmatched log', async () => {
+    h.state.statusMessageRow = {
+      conversation_id: 'conv-1',
+      conversations: { account_id: 'acc-1' },
+    }
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await runStatusWebhook({
+      id: 'wamid.CORRELATED-12345678',
+      status: 'delivered',
+      timestamp: '1789390860',
+      recipient_id: '5585997710664',
+    })
+
+    expect(h.state.messageStatusUpdates).toEqual([
+      { status: 'delivered', messageId: 'wamid.CORRELATED-12345678' },
+    ])
+    expect(h.dispatchWebhookEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      'acc-1',
+      'message.status_updated',
+      {
+        whatsapp_message_id: 'wamid.CORRELATED-12345678',
+        conversation_id: 'conv-1',
+        status: 'delivered',
+      }
+    )
+    expect(warnSpy).not.toHaveBeenCalled()
   })
 })
 
