@@ -12,6 +12,10 @@ export interface MetaBusinessMessagingEvent {
   user_data: {
     whatsapp_business_account_id: string;
     ctwa_clid: string;
+    em?: string[];
+    ph?: string[];
+    fn?: string[];
+    ln?: string[];
   };
   custom_data?: {
     value: number;

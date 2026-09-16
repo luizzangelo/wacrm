@@ -8,6 +8,10 @@ import {
   META_CONVERSION_EVENT_CLAIM_LEASE_MS,
 } from './constants';
 import {
+  buildMetaCapiHashedCustomerData,
+  type MetaCapiContactData,
+} from './meta-capi-user-data';
+import {
   sanitizeMetaConversionText,
   sendMetaConversionEvent,
   type MetaConversionDeliveryResult,
@@ -40,8 +44,15 @@ export interface StoredMetaConversionDeliveryConfig {
 export interface StoredMetaConversionAttribution {
   id: string;
   account_id: string;
+  contact_id: string | null;
   ctwa_clid: string;
   waba_id: string | null;
+}
+
+export interface StoredMetaConversionContact extends MetaCapiContactData {
+  id: string;
+  account_id: string;
+  phone: string;
 }
 
 export interface MetaConversionCandidate {
@@ -69,6 +80,10 @@ export interface MetaConversionEventRepository {
     accountId: string,
     attributionId: string
   ): Promise<StoredMetaConversionAttribution | null>;
+  getContact(
+    accountId: string,
+    contactId: string
+  ): Promise<StoredMetaConversionContact | null>;
   markBeforeAttempt(
     accountId: string,
     eventId: string,
@@ -183,12 +198,23 @@ export function createMetaConversionEventRepository(
     async getAttribution(accountId, attributionId) {
       const { data, error } = await db
         .from('meta_ad_attributions')
-        .select('id,account_id,ctwa_clid,waba_id')
+        .select('id,account_id,contact_id,ctwa_clid,waba_id')
         .eq('id', attributionId)
         .eq('account_id', accountId)
         .maybeSingle();
       assertDatabaseResult('get_attribution', error);
       return data as StoredMetaConversionAttribution | null;
+    },
+
+    async getContact(accountId, contactId) {
+      const { data, error } = await db
+        .from('contacts')
+        .select('id,account_id,phone,email,name')
+        .eq('id', contactId)
+        .eq('account_id', accountId)
+        .maybeSingle();
+      assertDatabaseResult('get_contact', error);
+      return data as StoredMetaConversionContact | null;
     },
 
     async markBeforeAttempt(
@@ -299,7 +325,8 @@ function parsePurchaseValue(value: number | string | null): number | null {
 
 export function buildMetaConversionPayload(
   event: StoredMetaConversionEvent,
-  attribution: StoredMetaConversionAttribution
+  attribution: StoredMetaConversionAttribution,
+  contact?: StoredMetaConversionContact | null
 ): MetaConversionsRequest | null {
   const eventTimeMs = Date.parse(event.event_time);
   if (
@@ -324,6 +351,7 @@ export function buildMetaConversionPayload(
     user_data: {
       whatsapp_business_account_id: attribution.waba_id,
       ctwa_clid: attribution.ctwa_clid,
+      ...buildMetaCapiHashedCustomerData(contact),
     },
   };
 
@@ -471,7 +499,11 @@ export async function processMetaConversionEvent(options: {
     );
   }
 
-  const payload = buildMetaConversionPayload(event, attribution);
+  const contact = attribution.contact_id
+    ? await repository.getContact(accountId, attribution.contact_id)
+    : null;
+
+  const payload = buildMetaConversionPayload(event, attribution, contact);
   if (!payload) {
     return markPreflight(
       repository,

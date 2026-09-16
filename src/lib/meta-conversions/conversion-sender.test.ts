@@ -9,14 +9,17 @@ import {
   type MetaConversionCandidate,
   type MetaConversionEventRepository,
   type StoredMetaConversionAttribution,
+  type StoredMetaConversionContact,
   type StoredMetaConversionDeliveryConfig,
   type StoredMetaConversionEvent,
 } from './conversion-sender';
 import type { MetaConversionDeliveryResult } from './conversions-api';
+import { sha256ForMeta } from './meta-capi-user-data';
 
 const ACCOUNT = 'account-1';
 const EVENT_DB_ID = 'event-row-1';
 const TOKEN_CIPHERTEXT = 'encrypted-conversion-token';
+const HASH = /^[a-f0-9]{64}$/;
 
 function event(
   overrides: Partial<StoredMetaConversionEvent> = {}
@@ -56,8 +59,22 @@ function attribution(
   return {
     id: 'attribution-1',
     account_id: ACCOUNT,
+    contact_id: 'contact-1',
     ctwa_clid: 'CtWa_RAW_keep-byte-for-byte',
     waba_id: 'waba-snapshot-1',
+    ...overrides,
+  };
+}
+
+function contact(
+  overrides: Partial<StoredMetaConversionContact> = {}
+): StoredMetaConversionContact {
+  return {
+    id: 'contact-1',
+    account_id: ACCOUNT,
+    phone: '+1 (415) 555-1212',
+    email: ' Test.User@Example.COM ',
+    name: 'Maria da Silva',
     ...overrides,
   };
 }
@@ -73,6 +90,7 @@ class MemoryRepository implements MetaConversionEventRepository {
   storedEvent: StoredMetaConversionEvent;
   storedConfig: StoredMetaConversionDeliveryConfig | null = config();
   storedAttribution: StoredMetaConversionAttribution | null = attribution();
+  storedContact: StoredMetaConversionContact | null = contact();
   pendingCandidates: MetaConversionCandidate[] = [
     { id: EVENT_DB_ID, account_id: ACCOUNT },
   ];
@@ -103,6 +121,14 @@ class MemoryRepository implements MetaConversionEventRepository {
     return accountId === this.storedEvent.account_id &&
       attributionId === this.storedAttribution?.id
       ? this.storedAttribution
+      : null;
+  }
+
+  async getContact(accountId: string, contactId: string) {
+    return accountId === this.storedEvent.account_id &&
+      accountId === this.storedContact?.account_id &&
+      contactId === this.storedContact?.id
+      ? this.storedContact
       : null;
   }
 
@@ -204,7 +230,7 @@ function processOne(
 
 describe('Meta conversion payload snapshots', () => {
   it.each(['LeadSubmitted', 'QualifiedLead'] as const)(
-    'builds %s without financial data or PII',
+    'builds %s with hashed customer data and no financial data',
     (eventName) => {
       const payload = buildMetaConversionPayload(
         event({
@@ -213,7 +239,8 @@ describe('Meta conversion payload snapshots', () => {
           value: 999.99,
           currency: 'BRL',
         }),
-        attribution()
+        attribution(),
+        contact()
       );
 
       expect(payload).toEqual({
@@ -227,26 +254,34 @@ describe('Meta conversion payload snapshots', () => {
             user_data: {
               whatsapp_business_account_id: 'waba-snapshot-1',
               ctwa_clid: 'CtWa_RAW_keep-byte-for-byte',
+              em: [sha256ForMeta('test.user@example.com')],
+              ph: [sha256ForMeta('14155551212')],
+              fn: [sha256ForMeta('maria')],
+              ln: [sha256ForMeta('silva')],
             },
           },
         ],
       });
-      expect(JSON.stringify(payload)).not.toMatch(/phone|email|custom_data/);
+      expect(JSON.stringify(payload)).not.toContain('custom_data');
+      for (const key of ['em', 'ph', 'fn', 'ln'] as const) {
+        expect(payload?.data[0].user_data[key]?.[0]).toMatch(HASH);
+      }
     }
   );
 
   it('builds Purchase from frozen decimal and currency snapshots', () => {
-    expect(
-      buildMetaConversionPayload(
-        event({
-          event_name: 'Purchase',
-          event_id: 'stable-purchase-id',
-          value: '1250.50',
-          currency: 'BRL',
-        }),
-        attribution()
-      )
-    ).toEqual({
+    const payload = buildMetaConversionPayload(
+      event({
+        event_name: 'Purchase',
+        event_id: 'stable-purchase-id',
+        value: '1250.50',
+        currency: 'BRL',
+      }),
+      attribution(),
+      contact()
+    );
+
+    expect(payload).toEqual({
       data: [
         {
           event_name: 'Purchase',
@@ -257,11 +292,18 @@ describe('Meta conversion payload snapshots', () => {
           user_data: {
             whatsapp_business_account_id: 'waba-snapshot-1',
             ctwa_clid: 'CtWa_RAW_keep-byte-for-byte',
+            em: [sha256ForMeta('test.user@example.com')],
+            ph: [sha256ForMeta('14155551212')],
+            fn: [sha256ForMeta('maria')],
+            ln: [sha256ForMeta('silva')],
           },
           custom_data: { value: 1250.5, currency: 'BRL' },
         },
       ],
     });
+    for (const key of ['em', 'ph', 'fn', 'ln'] as const) {
+      expect(payload?.data[0].user_data[key]?.[0]).toMatch(HASH);
+    }
   });
 
   it.each([
@@ -290,6 +332,43 @@ describe('Meta conversion payload snapshots', () => {
       whatsapp_business_account_id: ' WABA snapshot ',
       ctwa_clid: ' CtWa Raw Value ',
     });
+  });
+
+  it('does not leak contact PII into the serialized payload', () => {
+    const storedContact = contact();
+    const payload = buildMetaConversionPayload(
+      event(),
+      attribution(),
+      storedContact
+    );
+    const serialized = JSON.stringify(payload);
+
+    expect(serialized).not.toContain(String(storedContact.email));
+    expect(serialized).not.toContain(String(storedContact.phone));
+    expect(serialized).not.toContain(String(storedContact.name));
+    expect(serialized).not.toContain('test.user@example.com');
+    expect(serialized).not.toContain('14155551212');
+    expect(serialized).not.toContain('maria');
+    expect(serialized).not.toContain('silva');
+    expect(serialized).toContain(sha256ForMeta('test.user@example.com'));
+    expect(serialized).toContain(sha256ForMeta('14155551212'));
+  });
+
+  it('builds normally when the contact only has a phone', () => {
+    const payload = buildMetaConversionPayload(
+      event(),
+      attribution(),
+      contact({ email: null, name: null })
+    );
+
+    expect(payload?.data[0].user_data).toMatchObject({
+      whatsapp_business_account_id: 'waba-snapshot-1',
+      ctwa_clid: 'CtWa_RAW_keep-byte-for-byte',
+      ph: [sha256ForMeta('14155551212')],
+    });
+    expect(payload?.data[0].user_data).not.toHaveProperty('em');
+    expect(payload?.data[0].user_data).not.toHaveProperty('fn');
+    expect(payload?.data[0].user_data).not.toHaveProperty('ln');
   });
 });
 
@@ -324,6 +403,37 @@ describe('Meta conversion event processing', () => {
         error_message: null,
       },
     ]);
+  });
+
+  it('sends normally when the canonical contact has no email or name', async () => {
+    const repository = new MemoryRepository();
+    repository.storedContact = contact({ email: null, name: null });
+    const deliver = vi.fn().mockResolvedValue(success);
+
+    await expect(processOne(repository, deliver)).resolves.toEqual({
+      status: 'sent',
+      attempt: 1,
+    });
+    expect(deliver.mock.calls[0][0].payload.data[0].user_data).toEqual({
+      whatsapp_business_account_id: 'waba-snapshot-1',
+      ctwa_clid: 'CtWa_RAW_keep-byte-for-byte',
+      ph: [sha256ForMeta('14155551212')],
+    });
+  });
+
+  it('keeps hashed customer data optional when the attribution contact is unavailable', async () => {
+    const repository = new MemoryRepository();
+    repository.storedContact = null;
+    const deliver = vi.fn().mockResolvedValue(success);
+
+    await expect(processOne(repository, deliver)).resolves.toEqual({
+      status: 'sent',
+      attempt: 1,
+    });
+    expect(deliver.mock.calls[0][0].payload.data[0].user_data).toEqual({
+      whatsapp_business_account_id: 'waba-snapshot-1',
+      ctwa_clid: 'CtWa_RAW_keep-byte-for-byte',
+    });
   });
 
   it.each([
@@ -692,6 +802,61 @@ describe('Meta conversion event batch', () => {
 });
 
 describe('Meta conversion repository selection', () => {
+  it('resolves the attribution contact id with account scoping', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: attribution(),
+      error: null,
+    });
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle,
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const db = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      createMetaConversionEventRepository(db).getAttribution(
+        ACCOUNT,
+        'attribution-1'
+      )
+    ).resolves.toEqual(attribution());
+    expect(db.from).toHaveBeenCalledWith('meta_ad_attributions');
+    expect(query.select).toHaveBeenCalledWith(
+      'id,account_id,contact_id,ctwa_clid,waba_id'
+    );
+    expect(query.eq).toHaveBeenNthCalledWith(1, 'id', 'attribution-1');
+    expect(query.eq).toHaveBeenNthCalledWith(2, 'account_id', ACCOUNT);
+  });
+
+  it('resolves the canonical contact with account scoping', async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: contact(),
+      error: null,
+    });
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      maybeSingle,
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const db = {
+      from: vi.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      createMetaConversionEventRepository(db).getContact(ACCOUNT, 'contact-1')
+    ).resolves.toEqual(contact());
+    expect(db.from).toHaveBeenCalledWith('contacts');
+    expect(query.select).toHaveBeenCalledWith('id,account_id,phone,email,name');
+    expect(query.eq).toHaveBeenNthCalledWith(1, 'id', 'contact-1');
+    expect(query.eq).toHaveBeenNthCalledWith(2, 'account_id', ACCOUNT);
+  });
+
   it('claims with one pending-to-sending compare-and-set', async () => {
     const maybeSingle = vi.fn().mockResolvedValue({
       data: { id: EVENT_DB_ID },
