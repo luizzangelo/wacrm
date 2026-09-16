@@ -61,9 +61,11 @@ services:
 
   meta_conversions_scheduler:
     image: wacrm-staging:65c593f
+    environment:
+      META_CONVERSIONS_CRON_INTERVAL_MS: "120000"
     command: ["node", "/opt/wacrm/meta-conversions-scheduler.mjs"]
     configs:
-      - source: meta_conversions_scheduler_19a_v1
+      - source: meta_conversions_scheduler_19b_v1
         target: /opt/wacrm/meta-conversions-scheduler.mjs
         mode: 0444
     secrets:
@@ -75,7 +77,7 @@ services:
         - CMD
         - node
         - -e
-        - "const fs=require('node:fs');try{const t=Number(fs.readFileSync('/tmp/meta-conversions-scheduler-heartbeat','utf8'));process.exit(Number.isFinite(t)&&Date.now()-t<180000?0:1)}catch{process.exit(1)}"
+        - "import('/opt/wacrm/meta-conversions-scheduler.mjs').then(({INTERVAL_MS,REQUEST_TIMEOUT_MS})=>{const t=Number(require('node:fs').readFileSync('/tmp/meta-conversions-scheduler-heartbeat','utf8'));process.exit(Number.isFinite(t)&&Date.now()-t<INTERVAL_MS+REQUEST_TIMEOUT_MS+30000?0:1)}).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -102,7 +104,7 @@ services:
         - traefik.enable=false
 
 configs:
-  meta_conversions_scheduler_19a_v1:
+  meta_conversions_scheduler_19b_v1:
     file: ./meta-conversions-scheduler.mjs
 
 networks:

@@ -2,7 +2,24 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
-export const INTERVAL_MS = 120_000;
+export const DEFAULT_INTERVAL_MS = 120_000;
+export const MIN_INTERVAL_MS = 60_000;
+const MAX_INTERVAL_MS = 2_147_483_647; // Node timer limit; avoid overflow to 1ms.
+
+export function resolveCronIntervalMs(value) {
+  if (typeof value !== 'string' || !/^\d+$/.test(value.trim())) {
+    return DEFAULT_INTERVAL_MS;
+  }
+  const interval = Number(value.trim());
+  return Number.isSafeInteger(interval)
+    && interval >= MIN_INTERVAL_MS && interval <= MAX_INTERVAL_MS
+    ? interval
+    : DEFAULT_INTERVAL_MS;
+}
+
+export const INTERVAL_MS = resolveCronIntervalMs(
+  process.env.META_CONVERSIONS_CRON_INTERVAL_MS
+);
 export const REQUEST_TIMEOUT_MS = 70_000;
 export const ENDPOINT =
   'http://wacrm_staging_app:3000/api/meta-conversions/events/cron';
@@ -64,6 +81,7 @@ export async function runOnce({
 }
 
 export async function runScheduler({
+  intervalMs = INTERVAL_MS,
   run = runOnce,
   wait = sleep,
   now = Date.now,
@@ -78,13 +96,14 @@ export async function runScheduler({
     report({
       timestamp: new Date(started).toISOString(),
       event: 'meta_conversions_scheduler',
+      interval_ms: intervalMs,
       ...result,
     });
     heartbeat();
     if (keepRunning()) {
       // Sequential await + one replica: no overlapping requests. Cadence is
       // start-to-start, including request time, not sleep-after-completion.
-      await wait(Math.max(1, INTERVAL_MS - (now() - started)));
+      await wait(Math.max(1, intervalMs - (now() - started)));
     }
   }
 }

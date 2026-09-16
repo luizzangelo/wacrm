@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  ENDPOINT, INTERVAL_MS, REQUEST_TIMEOUT_MS,
-  runOnce, runScheduler, sanitizedCounts,
+  ENDPOINT, DEFAULT_INTERVAL_MS, MIN_INTERVAL_MS, REQUEST_TIMEOUT_MS,
+  runOnce, runScheduler, sanitizedCounts, resolveCronIntervalMs,
 } from './meta-conversions-scheduler.mjs';
 
 const idle = {
@@ -31,8 +31,8 @@ test('authenticated internal GET, strict redirects, timeout and safe idle log', 
   assert.equal(result.skipped, 0);
   assert.ok(!JSON.stringify(result).includes('private-value'));
   assert.ok(!JSON.stringify(result).includes('fictitious-secret'));
-  assert.equal(INTERVAL_MS, 120_000);
-  assert.ok(REQUEST_TIMEOUT_MS < INTERVAL_MS);
+  assert.equal(DEFAULT_INTERVAL_MS, 120_000);
+  assert.ok(REQUEST_TIMEOUT_MS < DEFAULT_INTERVAL_MS);
 });
 
 test('transport failure is never retried or logged verbatim', async () => {
@@ -80,6 +80,7 @@ test('two windows are sequential with 120-second start-to-start cadence', async 
   let clock = 0, calls = 0, active = 0, maxActive = 0;
   const starts = [], waits = [], reports = [];
   await runScheduler({
+    intervalMs: DEFAULT_INTERVAL_MS,
     now: () => clock,
     keepRunning: () => calls < 2,
     heartbeat: () => {},
@@ -100,4 +101,53 @@ test('two windows are sequential with 120-second start-to-start cadence', async 
   assert.deepEqual(waits, [115_000]);
   assert.equal(maxActive, 1);
   assert.equal(reports.length, 2);
+  assert.ok(reports.every((entry) => entry.interval_ms === 120_000));
+});
+
+test('interval defaults safely on missing, malformed, too small or overflowing values', () => {
+  for (const value of [undefined, null, '', ' ', 'bad', 'NaN', 'Infinity',
+    '0', '-60000', '59999', '60000.5', '6e4', '2147483648', '9007199254740993']) {
+    assert.equal(resolveCronIntervalMs(value), DEFAULT_INTERVAL_MS);
+  }
+});
+
+test('interval accepts minimum, staging default and five-minute cadence', () => {
+  assert.equal(MIN_INTERVAL_MS, 60_000);
+  for (const [value, expected] of [['60000', 60_000], ['120000', 120_000],
+    [' 300000 ', 300_000], ['2147483647', 2_147_483_647]]) {
+    assert.equal(resolveCronIntervalMs(value), expected);
+  }
+});
+
+test('configured five-minute cadence is used by the actual scheduling loop', async () => {
+  let clock = 0, calls = 0;
+  const starts = [], waits = [];
+  await runScheduler({
+    intervalMs: resolveCronIntervalMs('300000'),
+    now: () => clock,
+    keepRunning: () => calls < 2,
+    heartbeat: () => {}, report: () => {},
+    run: async () => { starts.push(clock); clock += 1_000; calls++; return {}; },
+    wait: async (ms) => { waits.push(ms); clock += ms; },
+  });
+  assert.deepEqual(starts, [0, 300_000]);
+  assert.deepEqual(waits, [299_000]);
+});
+
+test('execution longer than a one-minute interval delays cadence without overlap', async () => {
+  let clock = 0, calls = 0, active = 0, maxActive = 0;
+  const starts = [];
+  await runScheduler({
+    intervalMs: resolveCronIntervalMs('60000'),
+    now: () => clock,
+    keepRunning: () => calls < 2,
+    heartbeat: () => {}, report: () => {},
+    run: async () => {
+      starts.push(clock); active++; maxActive = Math.max(maxActive, active);
+      await Promise.resolve(); clock += 70_000; active--; calls++; return {};
+    },
+    wait: async (ms) => { clock += ms; },
+  });
+  assert.deepEqual(starts, [0, 70_001]);
+  assert.equal(maxActive, 1);
 });
