@@ -65,8 +65,10 @@ verify HTTP 200, processed/sent/failed=0, unchanged rows and no sender POST log.
 
 Copy `stack.yml` and `meta-conversions-scheduler.mjs` to `/opt/wacrm-staging/`.
 Back up its previous stack file first. Preserve the dirty application checkout.
-The app image in this stack matches the already validated `65c593f` deployment;
-future image upgrades must update both image references deliberately.
+The app image is `wacrm-staging:e44d2af`, including the 19C CAPI redirect-replay
+fix. The scheduler deliberately keeps `wacrm-staging:65c593f` as its Node runtime;
+its script is supplied by the versioned Docker Config, not baked into that
+image. App and scheduler image upgrades are independent and must be explicit.
 
 On the staging VPS:
 
