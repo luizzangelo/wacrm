@@ -184,6 +184,9 @@ export async function sendMetaConversionEvent(options: {
       },
       body: JSON.stringify(payload),
       cache: 'no-store',
+      // 307/308 preserve POST and fetch otherwise follows them automatically.
+      // A redirect is ambiguous; do not replay an already attempted event.
+      redirect: 'error',
       signal: AbortSignal.timeout(META_CONVERSIONS_REQUEST_TIMEOUT_MS),
     });
   } catch (error) {

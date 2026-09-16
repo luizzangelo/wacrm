@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
@@ -13,7 +13,7 @@ import {
   type StoredMetaConversionDeliveryConfig,
   type StoredMetaConversionEvent,
 } from './conversion-sender';
-import type { MetaConversionDeliveryResult } from './conversions-api';
+import { sendMetaConversionEvent, type MetaConversionDeliveryResult } from './conversions-api';
 import { sha256ForMeta } from './meta-capi-user-data';
 
 const ACCOUNT = 'account-1';
@@ -227,6 +227,207 @@ function processOne(
     now: () => new Date('2026-09-11T12:40:00.000Z'),
   });
 }
+
+function selectActualPending(repository: MemoryRepository) {
+  // Mirror the production query's status=pending predicate, instead of the
+  // legacy fixture's static candidate list. Repository query predicates are
+  // also asserted independently below.
+  vi.spyOn(repository, 'listPending').mockImplementation(async (limit) =>
+    repository.storedEvent.status === 'pending'
+      ? [{ id: repository.storedEvent.id, account_id: ACCOUNT }].slice(0, limit)
+      : []
+  );
+}
+
+function transportBatch(
+  repository: MemoryRepository,
+  fetcher: typeof fetch,
+  timestamp = '2026-09-11T12:40:00.000Z'
+) {
+  return processMetaConversionEventBatch({
+    repository,
+    now: () => new Date(timestamp),
+    processOne: (candidate) => processMetaConversionEvent({
+      repository,
+      accountId: candidate.account_id,
+      eventDbId: candidate.id,
+      decryptToken: () => 'EA_DECRYPTED_CONVERSION_TOKEN',
+      deliver: (input) => sendMetaConversionEvent({ ...input, fetcher }),
+      now: () => new Date(timestamp),
+    }),
+  });
+}
+
+describe('Delivery certainty: real client with mocked transport and repeat batches', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    [200, { events_received: 1 }, 'sent'],
+    [400, { error: { code: 100, error_subcode: 2804132, message: 'Invalid parameter' } }, 'failed'],
+    [401, { error: { code: 190 } }, 'failed'],
+    [403, { error: { code: 200 } }, 'failed'],
+    [429, { error: { code: 613 } }, 'delivery_unknown'],
+    [500, { error: { code: 1 } }, 'delivery_unknown'],
+    [502, {}, 'delivery_unknown'],
+    [503, {}, 'delivery_unknown'],
+    [504, {}, 'delivery_unknown'],
+    [200, {}, 'delivery_unknown'],
+    [200, { events_received: 0 }, 'delivery_unknown'],
+    [202, {}, 'delivery_unknown'],
+    [200, [], 'delivery_unknown'],
+    [200, { events_received: 1, error: { code: 4 } }, 'delivery_unknown'],
+  ] as const)(
+    'HTTP %i response %# has one attempt, terminal %s and zero second-pass POSTs',
+    async (httpStatus, body, expectedStatus) => {
+      const repository = new MemoryRepository();
+      selectActualPending(repository);
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify(body), { status: httpStatus })
+      );
+
+      const first = await transportBatch(repository, fetcher);
+      expect(first.scanned).toBe(1);
+      expect(first[expectedStatus]).toBe(1);
+      expect(repository.storedEvent).toMatchObject({ status: expectedStatus, attempts: 1 });
+      expect(repository.attemptResults[0]).toMatchObject({
+        status: expectedStatus, meta_http_status: httpStatus, attempt: 1,
+        sent_at: expectedStatus === 'sent' ? '2026-09-11T12:40:00.000Z' : null,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(fetcher.mock.calls[0][1]).toMatchObject({ method: 'POST', redirect: 'error' });
+
+      const second = await transportBatch(repository, fetcher);
+      expect(second.scanned).toBe(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(repository.storedEvent.attempts).toBe(1);
+      expect(repository.claims).toBe(1);
+      expect(repository.storedEvent.status).toBe(expectedStatus);
+    }
+  );
+
+  it.each(['AbortError', 'TimeoutError', 'ECONNRESET'])(
+    '%s after transport starts is terminal and not selected in the next batch',
+    async (name) => {
+      const repository = new MemoryRepository();
+      selectActualPending(repository);
+      const fetcher = vi.fn<typeof fetch>().mockRejectedValue(
+        Object.assign(new Error('private transport contents'), { name })
+      );
+      await transportBatch(repository, fetcher);
+      expect(repository.storedEvent).toMatchObject({ status: 'delivery_unknown', attempts: 1 });
+      expect(repository.attemptResults[0]).toMatchObject({
+        sent_at: null, meta_http_status: null,
+        error_message: name === 'ECONNRESET'
+          ? 'delivery_unknown_network' : 'delivery_unknown_timeout',
+      });
+      expect((await transportBatch(repository, fetcher)).scanned).toBe(0);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(repository.storedEvent.attempts).toBe(1);
+    }
+  );
+
+  it.each([200, 503])('unparseable HTTP %i never retries', async (httpStatus) => {
+    const repository = new MemoryRepository();
+    selectActualPending(repository);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('<html>not JSON</html>', { status: httpStatus })
+    );
+    await transportBatch(repository, fetcher);
+    expect(repository.storedEvent).toMatchObject({ status: 'delivery_unknown', attempts: 1 });
+    expect((await transportBatch(repository, fetcher)).scanned).toBe(0);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pending/sent/failed/delivery_unknown fleet sends only the pending row', async () => {
+    const repositories = ['pending', 'sent', 'failed', 'delivery_unknown'].map(
+      (status, index) => new MemoryRepository(event({
+        id: `row-${index}`, status: status as StoredMetaConversionEvent['status'],
+        attempts: index === 0 ? 0 : 1,
+      }))
+    );
+    const repository = repositories[0];
+    vi.spyOn(repository, 'listPending').mockImplementation(async (limit) => repositories
+      .filter((item) => item.storedEvent.status === 'pending')
+      .map((item) => ({ id: item.storedEvent.id, account_id: ACCOUNT })).slice(0, limit));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ events_received: 1 }), { status: 200 })
+    );
+    await transportBatch(repository, fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(repositories.map((item) => item.claims)).toEqual([1, 0, 0, 0]);
+    expect(repositories.map((item) => item.storedEvent.status))
+      .toEqual(['sent', 'sent', 'failed', 'delivery_unknown']);
+    expect((await transportBatch(repository, fetcher)).scanned).toBe(0);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('concurrent workers have one CAS winner and exactly one mocked HTTP POST', async () => {
+    const repository = new MemoryRepository();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => {
+      await Promise.resolve();
+      return new Response(JSON.stringify({ events_received: 1 }), { status: 200 });
+    });
+    const worker = () => processMetaConversionEvent({
+      repository, accountId: ACCOUNT, eventDbId: EVENT_DB_ID,
+      decryptToken: () => 'fictitious-token',
+      deliver: (input) => sendMetaConversionEvent({ ...input, fetcher }),
+    });
+    const results = await Promise.all([worker(), worker()]);
+    expect(results).toEqual(expect.arrayContaining([
+      { status: 'sent', attempt: 1 }, { status: 'busy' },
+    ]));
+    expect(repository.claims).toBe(1);
+    expect(repository.storedEvent.attempts).toBe(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('failed persistence after POST leaves sending, then terminal recovery without another POST', async () => {
+    const repository = new MemoryRepository();
+    selectActualPending(repository);
+    vi.spyOn(repository, 'persistAttemptResult').mockRejectedValueOnce(new Error('private failure'));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ events_received: 1 }), { status: 200 })
+    );
+    expect((await transportBatch(repository, fetcher)).errors).toBe(1);
+    expect(repository.storedEvent).toMatchObject({ status: 'sending', attempts: 1 });
+    // Reflect the real claim timestamp; only recover after the 30s lease.
+    repository.storedEvent.updated_at = '2026-09-11T12:40:00.000Z';
+    expect((await transportBatch(repository, fetcher)).recovered_sending).toBe(0);
+    expect(repository.storedEvent.status).toBe('sending');
+    const recovered = await transportBatch(repository, fetcher, '2026-09-11T12:41:00.000Z');
+    expect(recovered.recovered_sending).toBe(1);
+    expect(recovered.scanned).toBe(0);
+    expect(repository.storedEvent).toMatchObject({ status: 'delivery_unknown', attempts: 1 });
+    expect((await transportBatch(repository, fetcher)).scanned).toBe(0);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs retain operational identifiers/codes, never customer PII, hashes or secrets', async () => {
+    const repository = new MemoryRepository();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 613, error_subcode: 33, message: 'private upstream message' },
+    }), { status: 429 }));
+    await transportBatch(repository, fetcher);
+    const logs = JSON.stringify(vi.mocked(console.info).mock.calls);
+    expect(logs).toContain('delivery_unknown');
+    expect(logs).toContain(repository.storedEvent.event_id);
+    const entry = vi.mocked(console.info).mock.calls[0][1];
+    expect(entry).toMatchObject({
+      event_name: 'LeadSubmitted', attempt: 1, http_status: 429,
+      meta_error_code: 613, meta_error_subcode: 33, result: 'delivery_unknown',
+    });
+    for (const value of [contact().phone, contact().email!, contact().name!,
+      sha256ForMeta('test.user@example.com'), sha256ForMeta('14155551212'),
+      sha256ForMeta('maria'), sha256ForMeta('silva'), attribution().ctwa_clid,
+      'EA_DECRYPTED_CONVERSION_TOKEN', TOKEN_CIPHERTEXT, 'Authorization']) {
+      expect(logs).not.toContain(value);
+    }
+  });
+});
 
 describe('Meta conversion payload snapshots', () => {
   it.each(['LeadSubmitted', 'QualifiedLead'] as const)(

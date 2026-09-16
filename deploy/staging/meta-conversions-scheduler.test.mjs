@@ -11,6 +11,53 @@ const idle = {
   skipped_missing_config: 0, errors: 0,
 };
 
+test('HTTP cron errors retain normal cadence rather than immediate retry', async () => {
+  for (const status of [401, 429, 500]) {
+    let clock = 0, calls = 0;
+    const starts = [];
+    await runScheduler({
+      intervalMs: DEFAULT_INTERVAL_MS,
+      now: () => clock, keepRunning: () => calls < 2,
+      heartbeat: () => {}, report: () => {},
+      run: () => runOnce({
+        readSecret: () => 'fictitious-secret',
+        fetcher: async () => {
+          starts.push(clock); calls++;
+          return { status: calls === 1 ? status : 200, json: async () => idle };
+        },
+      }),
+      wait: async (ms) => { clock += ms; },
+    });
+    assert.deepEqual(starts, [0, 120_000]);
+    assert.equal(calls, 2);
+  }
+});
+
+test('HTTP 200 failed/delivery_unknown counters never trigger an immediate retry', async () => {
+  for (const state of ['failed', 'delivery_unknown']) {
+    let clock = 0, calls = 0;
+    const starts = [], reports = [];
+    await runScheduler({
+      intervalMs: DEFAULT_INTERVAL_MS,
+      now: () => clock, keepRunning: () => calls < 2,
+      heartbeat: () => {}, report: (entry) => reports.push(entry),
+      run: () => runOnce({
+        readSecret: () => 'fictitious-secret',
+        fetcher: async () => {
+          starts.push(clock); calls++;
+          return { status: 200, json: async () => calls === 1
+            ? { ...idle, scanned: 1, [state]: 1 } : idle };
+        },
+      }),
+      wait: async (ms) => { clock += ms; },
+    });
+    assert.deepEqual(starts, [0, 120_000]);
+    assert.equal(reports[0][state], 1);
+    assert.equal(reports[1].processed, 0);
+    assert.equal(calls, 2);
+  }
+});
+
 test('authenticated internal GET, strict redirects, timeout and safe idle log', async () => {
   let calls = 0;
   const result = await runOnce({

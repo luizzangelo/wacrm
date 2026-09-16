@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 
 import type { MetaConversionsRequest } from './conversions-api';
 import { sendMetaConversionEvent } from './conversions-api';
@@ -29,6 +31,48 @@ const payload: MetaConversionsRequest = {
 };
 
 describe('Meta Conversions API client', () => {
+  it.each([307, 308])(
+    'blocks HTTP %i redirects rather than replaying the POST (loopback only)',
+    async (redirectStatus) => {
+      let posts = 0;
+      const server = createServer((request, response) => {
+        request.resume();
+        if (request.method === 'POST') posts++;
+        if (request.url === '/first') {
+          response.writeHead(redirectStatus, { Location: '/again' });
+          response.end();
+        } else {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ events_received: 1 }));
+        }
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('local test server unavailable');
+      }
+      try {
+        const result = await sendMetaConversionEvent({
+          datasetId: 'fictitious-dataset',
+          accessToken: 'fictitious-token',
+          payload,
+          fetcher: (_url, init) => fetch(
+            `http://127.0.0.1:${address.port}/first`, init
+          ),
+        });
+        expect(posts).toBe(1);
+        expect(result.classification).toBe('DELIVERY_UNKNOWN');
+        expect(result.httpStatus).toBeNull();
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => error ? reject(error) : resolve());
+        });
+      }
+    }
+  );
+
   it('posts one exact Business Messaging event with Bearer auth', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
@@ -65,6 +109,7 @@ describe('Meta Conversions API client', () => {
       },
       body: JSON.stringify(payload),
       cache: 'no-store',
+      redirect: 'error',
     });
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(String(init?.body))).toEqual(payload);

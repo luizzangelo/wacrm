@@ -60,6 +60,23 @@ afterEach(() => {
 });
 
 describe('Meta conversion delivery cron', () => {
+  it.each(['failed', 'delivery_unknown'])(
+    'returns HTTP 200 counters for terminal %s, without invoking the batch twice',
+    async (status) => {
+      h.processMetaConversionEventBatch.mockResolvedValueOnce({
+        scanned: 1, sent: 0, failed: status === 'failed' ? 1 : 0,
+        delivery_unknown: status === 'delivery_unknown' ? 1 : 0,
+      });
+      const response = await GET(request('cron-secret')) as unknown as {
+        body: unknown;
+        init?: { status?: number };
+      };
+      expect(response.init?.status ?? 200).toBe(200);
+      expect(response.body).toMatchObject({ scanned: 1, [status]: 1 });
+      expect(h.processMetaConversionEventBatch).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it('returns 503 when the server-side cron secret is absent', async () => {
     delete process.env.AUTOMATION_CRON_SECRET;
 
