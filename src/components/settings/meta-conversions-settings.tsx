@@ -27,6 +27,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
 
 import { SettingsPanelHead } from './settings-panel-head';
+import { MetaConversionEvents } from './meta-conversion-events';
 
 interface SafeConfig {
   configured: boolean;
@@ -236,6 +237,10 @@ export function MetaConversionsSettings() {
   return (
     <section className="animate-in fade-in-50 space-y-6 duration-200">
       <SettingsPanelHead title={t('title')} description={t('description')} />
+
+      {canEditSettings && accountId ? (
+        <MetaConversionEvents key={accountId} accountId={accountId} />
+      ) : null}
 
       {!canEditSettings ? (
         <Alert>
