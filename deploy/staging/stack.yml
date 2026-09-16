@@ -1,0 +1,120 @@
+version: "3.8"
+
+services:
+  app:
+    image: wacrm-staging:65c593f
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      NEXT_PUBLIC_SITE_URL: https://crm.luizangelo.com.br
+      NEXT_PUBLIC_APP_LOCALE: ${NEXT_PUBLIC_APP_LOCALE:-en}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export SUPABASE_SERVICE_ROLE_KEY="$$(cat /run/secrets/wacrm_staging_supabase_service_role)"
+        export ENCRYPTION_KEY="$$(cat /run/secrets/wacrm_staging_encryption_key)"
+        export AUTOMATION_CRON_SECRET="$$(cat /run/secrets/wacrm_staging_automation_cron_secret)"
+        export META_APP_SECRET="$$(cat /run/secrets/wacrm_staging_meta_app_secret)"
+        exec node server.js
+    secrets:
+      - wacrm_staging_supabase_service_role
+      - wacrm_staging_encryption_key
+      - wacrm_staging_automation_cron_secret
+      - wacrm_staging_meta_app_secret
+    networks:
+      - network_public
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000').then((r)=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 768M
+        reservations:
+          cpus: "0.10"
+          memory: 256M
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=network_public
+        - traefik.http.routers.wacrm_staging.entrypoints=websecure
+        - traefik.http.routers.wacrm_staging.rule=Host(`crm.luizangelo.com.br`)
+        - traefik.http.routers.wacrm_staging.service=wacrm_staging
+        - traefik.http.routers.wacrm_staging.tls.certresolver=letsencryptresolver
+        - traefik.http.services.wacrm_staging.loadbalancer.passHostHeader=true
+        - traefik.http.services.wacrm_staging.loadbalancer.server.port=3000
+
+  meta_conversions_scheduler:
+    image: wacrm-staging:65c593f
+    command: ["node", "/opt/wacrm/meta-conversions-scheduler.mjs"]
+    configs:
+      - source: meta_conversions_scheduler_19a_v1
+        target: /opt/wacrm/meta-conversions-scheduler.mjs
+        mode: 0444
+    secrets:
+      - wacrm_staging_automation_cron_secret
+    networks:
+      - network_public
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const fs=require('node:fs');try{const t=Number(fs.readFileSync('/tmp/meta-conversions-scheduler-heartbeat','utf8'));process.exit(Number.isFinite(t)&&Date.now()-t<180000?0:1)}catch{process.exit(1)}"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 75s
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+        parallelism: 1
+      rollback_config:
+        order: stop-first
+        parallelism: 1
+      restart_policy:
+        condition: any
+        delay: 120s
+      resources:
+        limits:
+          cpus: "0.15"
+          memory: 128M
+        reservations:
+          cpus: "0.01"
+          memory: 32M
+      labels:
+        - traefik.enable=false
+
+configs:
+  meta_conversions_scheduler_19a_v1:
+    file: ./meta-conversions-scheduler.mjs
+
+networks:
+  network_public:
+    external: true
+
+secrets:
+  wacrm_staging_supabase_service_role:
+    external: true
+  wacrm_staging_encryption_key:
+    external: true
+  wacrm_staging_automation_cron_secret:
+    external: true
+  wacrm_staging_meta_app_secret:
+    external: true
