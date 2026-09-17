@@ -22,6 +22,11 @@
 
 # misc
 .DS_Store
+._*
+.AppleDouble/
+* 2.ts
+* 2.tsx
+/supabase/.temp/
 *.pem
 
 # debug

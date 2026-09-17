@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { daysAgoStart, lastNDayKeys, localDayKey } from '@/lib/dashboard/date-utils'
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
       .limit(MAX_ROWS + 1)
 
     if (error) {
-      console.error('[ai/usage GET] fetch error:', error)
+      console.error('[ai/usage GET] fetch error:', operationalErrorFields(error))
       return NextResponse.json(
         { error: 'Failed to load usage' },
         { status: 500 },

@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET /api/v1/conversations/{id}/messages — list a conversation's
 // messages (scope: messages:read), newest first, keyset-paginated.
@@ -47,7 +48,7 @@ export async function GET(
 
     const { data, error } = await query;
     if (error) {
-      console.error('[api/v1/messages] list error:', error);
+      console.error('[api/v1/messages] list error:', operationalErrorFields(error));
       return fail('internal', 'Failed to list messages', 500);
     }
 

@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
@@ -219,7 +220,7 @@ export async function PATCH(
       dry_run: isDryRun(),
     })
   } catch (error) {
-    console.error('Error editing template:', error)
+    console.error('Error editing template:', operationalErrorFields(error))
     return NextResponse.json(
       {
         error:
@@ -318,7 +319,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, dry_run: isDryRun() })
   } catch (error) {
-    console.error('Error deleting template:', error)
+    console.error('Error deleting template:', operationalErrorFields(error))
     return NextResponse.json(
       {
         error:

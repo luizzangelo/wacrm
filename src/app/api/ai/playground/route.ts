@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     const config = await loadAiConfig(supabase, accountId, {
       requireActive: false,
     }).catch((err) => {
-      console.error('[ai/playground] loadAiConfig error:', err)
+      console.error('[ai/playground] loadAiConfig error:', operationalErrorFields(err))
       throw new AiError('Stored API key could not be decrypted.', {
         code: 'key_decrypt_failed',
         status: 400,

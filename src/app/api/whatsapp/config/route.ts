@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
@@ -92,7 +93,7 @@ export async function GET() {
       .maybeSingle()
 
     if (configError) {
-      console.error('Error fetching whatsapp_config:', configError)
+      console.error('Error fetching whatsapp_config:', operationalErrorFields(configError))
       return NextResponse.json(
         { connected: false, reason: 'db_error', message: 'Failed to fetch configuration' },
         { status: 200 }
@@ -116,7 +117,7 @@ export async function GET() {
     try {
       accessToken = decrypt(config.access_token)
     } catch (err) {
-      console.error('[whatsapp/config GET] Token decryption failed:', err)
+      console.error('[whatsapp/config GET] Token decryption failed:', operationalErrorFields(err))
       return NextResponse.json(
         {
           connected: false,
@@ -138,7 +139,7 @@ export async function GET() {
       return NextResponse.json({ connected: true, phone_info: phoneInfo })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
-      console.error('[whatsapp/config GET] Meta API verification failed:', message)
+      console.error('[whatsapp/config GET] Meta API verification failed:', operationalErrorFields(message))
       return NextResponse.json(
         {
           connected: false,
@@ -149,7 +150,7 @@ export async function GET() {
       )
     }
   } catch (error) {
-    console.error('Error in WhatsApp config GET:', error)
+    console.error('Error in WhatsApp config GET:', operationalErrorFields(error))
     return NextResponse.json(
       { connected: false, reason: 'unknown', message: 'Internal server error' },
       { status: 500 }
@@ -218,7 +219,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (claimedError) {
-      console.error('Error checking phone_number_id ownership:', claimedError)
+      console.error('Error checking phone_number_id ownership:', operationalErrorFields(claimedError))
       return NextResponse.json(
         { error: 'Failed to validate configuration' },
         { status: 500 }
@@ -244,7 +245,7 @@ export async function POST(request: Request) {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
-      console.error('Meta API verification failed during save:', message)
+      console.error('Meta API verification failed during save:', operationalErrorFields(message))
       return NextResponse.json(
         { error: `Meta API error: ${message}` },
         { status: 400 }
@@ -259,7 +260,7 @@ export async function POST(request: Request) {
       encryptedVerifyToken = verify_token ? encrypt(verify_token) : null
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown encryption error'
-      console.error('Encryption failed:', message)
+      console.error('Encryption failed:', operationalErrorFields(message))
       return NextResponse.json(
         {
           error:
@@ -320,7 +321,7 @@ export async function POST(request: Request) {
         } catch (err) {
           registrationError =
             err instanceof Error ? err.message : 'Unknown Meta API error'
-          console.error('Phone number /register failed:', registrationError)
+          console.error('Phone number /register failed:', operationalErrorFields(registrationError))
           // We deliberately fall through and still save the row so the
           // user can retry without re-entering everything. The UI
           // surfaces `last_registration_error` so they see WHY it's
@@ -343,7 +344,7 @@ export async function POST(request: Request) {
         subscribedAppsAt = new Date().toISOString()
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
-        console.warn('WABA subscribed_apps failed (non-fatal):', message)
+        console.warn('WABA subscribed_apps failed (non-fatal):', operationalErrorFields(message))
         // Subscription failures are rare once the App has the right
         // permissions; we don't block save on them — the diagnostic
         // endpoint surfaces this state too.
@@ -373,7 +374,7 @@ export async function POST(request: Request) {
         .eq('account_id', accountId)
 
       if (updateError) {
-        console.error('Error updating whatsapp_config:', updateError)
+        console.error('Error updating whatsapp_config:', operationalErrorFields(updateError))
         return NextResponse.json(
           { error: 'Failed to update configuration' },
           { status: 500 }
@@ -393,7 +394,7 @@ export async function POST(request: Request) {
         })
 
       if (insertError) {
-        console.error('Error inserting whatsapp_config:', insertError)
+        console.error('Error inserting whatsapp_config:', operationalErrorFields(insertError))
         return NextResponse.json(
           { error: 'Failed to save configuration' },
           { status: 500 }
@@ -426,7 +427,7 @@ export async function POST(request: Request) {
       phone_info: phoneInfo,
     })
   } catch (error) {
-    console.error('Error in WhatsApp config POST:', error)
+    console.error('Error in WhatsApp config POST:', operationalErrorFields(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -465,7 +466,7 @@ export async function DELETE() {
       .eq('account_id', accountId)
 
     if (deleteError) {
-      console.error('Error deleting whatsapp_config:', deleteError)
+      console.error('Error deleting whatsapp_config:', operationalErrorFields(deleteError))
       return NextResponse.json(
         { error: 'Failed to delete configuration' },
         { status: 500 }
@@ -474,7 +475,7 @@ export async function DELETE() {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error in WhatsApp config DELETE:', error)
+    console.error('Error in WhatsApp config DELETE:', operationalErrorFields(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

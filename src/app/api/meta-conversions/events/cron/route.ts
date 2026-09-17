@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
@@ -36,10 +37,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('[meta-conversions][delivery] batch failed', {
       result: 'error',
-      error_code:
-        error && typeof error === 'object' && 'code' in error
-          ? String(error.code).slice(0, 64)
-          : 'unknown',
+      error_code: operationalErrorFields(error).error_code ?? 'unknown',
     });
     return NextResponse.json(
       { error: 'conversion delivery batch failed' },

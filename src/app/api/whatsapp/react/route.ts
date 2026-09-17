@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Unknown Meta API error';
-      console.error('[whatsapp/react] Meta send failed:', message);
+      console.error('[whatsapp/react] Meta send failed:', operationalErrorFields(message));
       return NextResponse.json(
         { error: `Meta API error: ${message}` },
         { status: 502 },
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
         .eq('actor_id', userId);
 
       if (delError) {
-        console.error('[whatsapp/react] DB delete failed:', delError.message);
+        console.error('[whatsapp/react] DB delete failed:', operationalErrorFields(delError));
         return NextResponse.json(
           { error: 'Reaction sent to Meta but DB delete failed' },
           { status: 500 },
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
       );
 
       if (upsertError) {
-        console.error('[whatsapp/react] DB upsert failed:', upsertError.message);
+        console.error('[whatsapp/react] DB upsert failed:', operationalErrorFields(upsertError));
         return NextResponse.json(
           { error: 'Reaction sent to Meta but DB upsert failed' },
           { status: 500 },
@@ -166,7 +167,7 @@ export async function POST(request: Request) {
   } catch (error) {
     // requireRole throws Unauthorized/Forbidden; toErrorResponse maps
     // those to 401/403 and collapses anything else to a generic 500.
-    console.error('Error in WhatsApp react POST:', error);
+    console.error('Error in WhatsApp react POST:', operationalErrorFields(error));
     return toErrorResponse(error);
   }
 }

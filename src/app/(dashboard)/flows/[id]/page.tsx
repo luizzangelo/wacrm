@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -53,7 +55,7 @@ export default function FlowEditorPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error(err);
+          console.error(operationalErrorFields(err));
           toast.error(t("loadError"));
         }
       } finally {

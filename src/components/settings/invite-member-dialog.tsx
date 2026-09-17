@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 // ============================================================
 // InviteMemberDialog
 //
@@ -139,7 +141,7 @@ export function InviteMemberDialog({
       });
       onCreated();
     } catch (err) {
-      console.error('[InviteMemberDialog] create error:', err);
+      console.error('[InviteMemberDialog] create error:', operationalErrorFields(err));
       toast.error('Could not reach the server. Try again?');
     } finally {
       setSubmitting(false);

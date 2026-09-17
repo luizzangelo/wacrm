@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET   /api/v1/contacts/{id} — read a contact  (scope: contacts:read)
 // PATCH /api/v1/contacts/{id} — update a contact (scope: contacts:write)
@@ -75,7 +76,7 @@ export async function PATCH(
         .eq('id', id)
         .eq('account_id', ctx.accountId);
       if (error) {
-        console.error('[api/v1/contacts] update error:', error);
+        console.error('[api/v1/contacts] update error:', operationalErrorFields(error));
         return fail('internal', 'Failed to update contact', 500);
       }
     }

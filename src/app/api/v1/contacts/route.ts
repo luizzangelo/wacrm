@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET  /api/v1/contacts  — list contacts (scope: contacts:read)
 // POST /api/v1/contacts  — create a contact  (scope: contacts:write)
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await query;
     if (error) {
-      console.error('[api/v1/contacts] list error:', error);
+      console.error('[api/v1/contacts] list error:', operationalErrorFields(error));
       return fail('internal', 'Failed to list contacts', 500);
     }
 

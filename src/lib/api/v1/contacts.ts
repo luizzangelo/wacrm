@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Shared contact logic for the public API (v1) contact endpoints.
 //
@@ -144,7 +145,7 @@ export async function findOrCreateContact(
       const raced = await findExistingContact(db, accountId, sanitized);
       if (raced) return { id: raced.id, created: false };
     }
-    console.error('[api/v1/contacts] create error:', error);
+    console.error('[api/v1/contacts] create error:', operationalErrorFields(error));
     throw new ContactError('Failed to create contact', 500);
   }
 
@@ -209,7 +210,7 @@ export async function setContactTags(
           tagId,
         });
       } catch (error) {
-        console.error('[api/v1/contacts] tag add failed:', error);
+        console.error('[api/v1/contacts] tag add failed:', operationalErrorFields(error));
         throw new ContactError('Failed to update contact tags', 500);
       }
     }

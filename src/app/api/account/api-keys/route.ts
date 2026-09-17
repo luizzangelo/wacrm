@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // /api/account/api-keys
 //
@@ -55,7 +56,7 @@ export async function GET() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[GET /api/account/api-keys] fetch error:', error);
+      console.error('[GET /api/account/api-keys] fetch error:', operationalErrorFields(error));
       return NextResponse.json(
         { error: 'Failed to load API keys' },
         { status: 500 }
@@ -138,7 +139,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !data) {
-      console.error('[POST /api/account/api-keys] insert error:', error);
+      console.error('[POST /api/account/api-keys] insert error:', operationalErrorFields(error));
       return NextResponse.json(
         { error: 'Failed to create API key' },
         { status: 500 }

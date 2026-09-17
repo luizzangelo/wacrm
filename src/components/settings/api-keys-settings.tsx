@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 // ============================================================
 // ApiKeysSettings — Settings → API keys
 //
@@ -89,7 +91,7 @@ export function ApiKeysSettings() {
       const data = (await res.json()) as { keys: ApiKey[] };
       setKeys(data.keys);
     } catch (err) {
-      console.error('[ApiKeysSettings] load error:', err);
+      console.error('[ApiKeysSettings] load error:', operationalErrorFields(err));
       toast.error(t('networkError'));
     } finally {
       setLoading(false);
@@ -119,7 +121,7 @@ export function ApiKeysSettings() {
         )
       );
     } catch (err) {
-      console.error('[ApiKeysSettings] revoke error:', err);
+      console.error('[ApiKeysSettings] revoke error:', operationalErrorFields(err));
       toast.error(t('networkError'));
     } finally {
       setRevoking(null);
@@ -330,7 +332,7 @@ function CreateKeyDialog({
       setCreatedKey(payload.plaintext as string);
       onCreated();
     } catch (err) {
-      console.error('[CreateKeyDialog] create error:', err);
+      console.error('[CreateKeyDialog] create error:', operationalErrorFields(err));
       toast.error(t('networkError'));
     } finally {
       setSubmitting(false);

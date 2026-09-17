@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { MetaConversionEvent, MetaConversionEventStatus } from '@/types';
@@ -640,10 +641,7 @@ export async function processMetaConversionEventBatch(options: {
         account_id: candidate.account_id,
         event_db_id: candidate.id,
         result: 'error',
-        error_code:
-          error && typeof error === 'object' && 'code' in error
-            ? String(error.code).slice(0, 64)
-            : 'unknown',
+        error_code: operationalErrorFields(error).error_code ?? 'unknown',
       });
     }
   }

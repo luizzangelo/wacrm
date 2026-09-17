@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET    /api/v1/webhooks/{id} — read an endpoint   (webhooks:manage)
 // PATCH  /api/v1/webhooks/{id} — update url/events/is_active
@@ -32,7 +33,7 @@ export async function GET(
       .maybeSingle();
 
     if (error) {
-      console.error('[api/v1/webhooks] read error:', error);
+      console.error('[api/v1/webhooks] read error:', operationalErrorFields(error));
       return fail('internal', 'Failed to read webhook', 500);
     }
     if (!data) return fail('not_found', 'Webhook not found', 404);
@@ -106,7 +107,7 @@ export async function PATCH(
       .maybeSingle();
 
     if (error) {
-      console.error('[api/v1/webhooks] update error:', error);
+      console.error('[api/v1/webhooks] update error:', operationalErrorFields(error));
       return fail('internal', 'Failed to update webhook', 500);
     }
     if (!data) return fail('not_found', 'Webhook not found', 404);
@@ -134,7 +135,7 @@ export async function DELETE(
       .maybeSingle();
 
     if (error) {
-      console.error('[api/v1/webhooks] delete error:', error);
+      console.error('[api/v1/webhooks] delete error:', operationalErrorFields(error));
       return fail('internal', 'Failed to delete webhook', 500);
     }
     if (!data) return fail('not_found', 'Webhook not found', 404);

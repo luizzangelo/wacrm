@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Resolve (or create) the conversation for a phone number.
 //
@@ -126,7 +127,7 @@ export async function resolveConversationByPhone(
       } else {
         console.error(
           '[resolve-conversation] contact create error:',
-          createErr
+          operationalErrorFields(createErr)
         );
         throw new SendMessageError('db_error', 'Failed to create contact', 500);
       }
@@ -173,7 +174,7 @@ async function findOrCreateConversationRow(
     .limit(1);
 
   if (findErr) {
-    console.error('[resolve-conversation] conversation lookup error:', findErr);
+    console.error('[resolve-conversation] conversation lookup error:', operationalErrorFields(findErr));
     throw new SendMessageError('db_error', 'Failed to resolve conversation', 500);
   }
 
@@ -204,7 +205,7 @@ async function findOrCreateConversationRow(
         return raced[0].id;
       }
     }
-    console.error('[resolve-conversation] conversation create error:', convErr);
+    console.error('[resolve-conversation] conversation create error:', operationalErrorFields(convErr));
     throw new SendMessageError('db_error', 'Failed to create conversation', 500);
   }
 

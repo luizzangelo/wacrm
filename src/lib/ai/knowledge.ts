@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AiConfig } from './types'
 import { chunkText } from './chunk'
@@ -122,7 +123,7 @@ export async function retrieveKnowledge(
         }
       }
     } catch (err) {
-      console.error('[ai knowledge] semantic retrieval failed, falling back to FTS:', err)
+      console.error('[ai knowledge] semantic retrieval failed, falling back to FTS:', operationalErrorFields(err))
     }
   }
 
@@ -141,7 +142,7 @@ export async function retrieveKnowledge(
         }
       }
     } catch (err) {
-      console.error('[ai knowledge] lexical retrieval failed:', err)
+      console.error('[ai knowledge] lexical retrieval failed:', operationalErrorFields(err))
     }
   }
 

@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
@@ -59,7 +60,7 @@ export async function GET(request: Request) {
     .eq('status', 'active')
 
   if (error) {
-    console.error('[flows-cron] active-run scan failed:', error.message)
+    console.error('[flows-cron] active-run scan failed:', operationalErrorFields(error))
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   if (!runs?.length) return NextResponse.json({ swept: 0 })

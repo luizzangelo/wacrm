@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
@@ -184,7 +185,7 @@ export async function POST(request: Request) {
   } catch (error) {
     // requireRole throws Unauthorized/Forbidden; toErrorResponse maps
     // those to 401/403 and collapses anything else to a generic 500.
-    console.error('Error in WhatsApp send POST:', error)
+    console.error('Error in WhatsApp send POST:', operationalErrorFields(error))
     return toErrorResponse(error)
   }
 }
@@ -224,7 +225,7 @@ async function findOrCreateConversation(
     .single()
 
   if (error) {
-    console.error('Error creating conversation for contact send:', error.message)
+    console.error('Error creating conversation for contact send:', operationalErrorFields(error))
     return null
   }
 

@@ -386,3 +386,39 @@ describe('sendMessageToConversation — Brazilian ninth-digit fallback', () => {
     expect(result.whatsappMessageId).toBe('wamid.br-success');
   });
 });
+
+describe('sendMessageToConversation — privacy regression (HTTP fully mocked)', () => {
+  for (const outcome of ['normal','fallback','meta_error','network_error']) {
+    it(`never logs full phones/PII/secrets on ${outcome}`, async () => {
+      const original='558598765432', variant='5585998765432';
+      const forbidden=[original,variant,'fixture@example.invalid','Private Fixture Name',
+        'fictitious-secret','fictitious-ctwa-clid','a'.repeat(64)];
+      const spies=['log','warn','error','info'].map(method=>
+        vi.spyOn(console,method as 'log'|'warn'|'error'|'info').mockImplementation(()=>{}));
+      try {
+        const sender=vi.mocked((await import('@/lib/whatsapp/meta-api')).sendTextMessage);
+        sender.mockReset();
+        sender.mockImplementation(async ({to})=>{
+          if (outcome==='fallback' && to===original)
+            throw new Error('(#131030) '+forbidden.join(' '));
+          if (outcome==='meta_error') throw new Error('(#131026) '+forbidden.join(' '));
+          if (outcome==='network_error') throw new TypeError('Network error '+forbidden.join(' '));
+          return {messageId:'wamid.fixture'};
+        });
+        const captured:CapturedWrites={};
+        const result=sendMessageToConversation(sendPathDb([],captured,original),'acct-1',
+          {conversationId:'cv-1',messageType:'text',contentText:'Fixture'});
+        if (outcome.endsWith('error')) await expect(result).rejects.toBeInstanceOf(SendMessageError);
+        else await expect(result).resolves.toMatchObject({whatsappMessageId:'wamid.fixture'});
+        expect(sender).toHaveBeenCalledTimes(outcome==='fallback'?2:1);
+        const output=JSON.stringify(spies.flatMap(spy=>spy.mock.calls));
+        for(const value of forbidden) expect(output).not.toContain(value);
+        if(outcome==='fallback') {
+          expect(output).toContain('recipient_last4');
+          expect(output).toContain('5432');
+          expect(captured.contact).toEqual({phone:variant});
+        }
+      } finally { for(const spy of spies) spy.mockRestore(); }
+    });
+  }
+});

@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import {
   createContext,
   useContext,
@@ -203,12 +205,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const error = result.error;
-        console.error("[AuthProvider] fetchProfile error:", {
+        console.error("[AuthProvider] fetchProfile error:", operationalErrorFields({
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code,
-        });
+        }));
         // One hiccup here used to lock the session read-only for good:
         // the profile stayed null, so every `useCan` gate answered
         // false and no page offered a way to recover (issue #471).
@@ -243,12 +245,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq("id", data.account_id)
             .maybeSingle();
           if (accountErr) {
-            console.error("[AuthProvider] fetchAccount error:", {
+            console.error("[AuthProvider] fetchAccount error:", operationalErrorFields({
               message: accountErr.message,
               details: accountErr.details,
               hint: accountErr.hint,
               code: accountErr.code,
-            });
+            }));
           } else if (account) {
             accountRow = {
               id: account.id,
@@ -297,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatusDetail("no profiles row for the signed-in user");
       }
     } catch (err) {
-      console.error("[AuthProvider] fetchProfile threw:", err);
+      console.error("[AuthProvider] fetchProfile threw:", operationalErrorFields(err));
       lastFetchedUserIdRef.current = null;
       setStatusDetail(err instanceof Error ? err.message : "profile fetch failed");
     } finally {
@@ -324,7 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           error,
         } = await supabase.auth.getSession();
 
-        if (error) console.error("[AuthProvider] getSession error:", error.message);
+        if (error) console.error("[AuthProvider] getSession error:", operationalErrorFields(error));
 
         if (!mounted) return;
         const currentUser = session?.user ?? null;
@@ -343,7 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfileLoading(false);
         }
       } catch (err) {
-        console.error("[AuthProvider] init threw:", err);
+        console.error("[AuthProvider] init threw:", operationalErrorFields(err));
       } finally {
         if (mounted) setLoading(false);
         clearTimeout(safetyTimer);

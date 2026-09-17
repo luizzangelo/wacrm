@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET /api/v1/conversations — list conversations (scope: conversations:read)
 //
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await query;
     if (error) {
-      console.error('[api/v1/conversations] list error:', error);
+      console.error('[api/v1/conversations] list error:', operationalErrorFields(error));
       return fail('internal', 'Failed to list conversations', 500);
     }
 

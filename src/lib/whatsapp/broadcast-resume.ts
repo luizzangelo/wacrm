@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Broadcast resume / retry (issue #472).
 //
@@ -83,7 +84,7 @@ export async function claimBroadcastDelivery(
     .select('id');
 
   if (error) {
-    console.error('[broadcast-resume] claim failed:', error.message);
+    console.error('[broadcast-resume] claim failed:', operationalErrorFields(error));
     return false;
   }
   return Array.isArray(data) && data.length > 0;
@@ -99,7 +100,7 @@ export async function releaseBroadcastDelivery(
     .update({ delivery_locked_at: null })
     .eq('id', broadcastId);
   if (error) {
-    console.error('[broadcast-resume] release failed:', error.message);
+    console.error('[broadcast-resume] release failed:', operationalErrorFields(error));
   }
 }
 
@@ -166,7 +167,7 @@ export async function planBroadcastResume(
     .order('created_at', { ascending: true });
 
   if (recError) {
-    console.error('[broadcast-resume] recipient load failed:', recError.message);
+    console.error('[broadcast-resume] recipient load failed:', operationalErrorFields(recError));
     throw new BroadcastError('internal', 'Failed to load recipients', 500);
   }
 

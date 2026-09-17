@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
@@ -81,7 +82,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Error in WhatsApp media GET:', error)
+    console.error('Error in WhatsApp media GET:', operationalErrorFields(error))
     return NextResponse.json(
       { error: 'Failed to fetch media' },
       { status: 500 }

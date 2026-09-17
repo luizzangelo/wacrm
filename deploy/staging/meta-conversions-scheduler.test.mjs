@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   ENDPOINT, DEFAULT_INTERVAL_MS, MIN_INTERVAL_MS, REQUEST_TIMEOUT_MS,
   runOnce, runScheduler, sanitizedCounts, resolveCronIntervalMs,
+  resolveCronTimeoutMs, resolveSchedulerConfig,
 } from './meta-conversions-scheduler.mjs';
 
 const idle = {
@@ -10,6 +11,65 @@ const idle = {
   skipped_disabled: 0, skipped_no_attribution: 0,
   skipped_missing_config: 0, errors: 0,
 };
+
+test('generic safe defaults and explicit per-environment internal endpoint/secret path', async () => {
+  const defaults = resolveSchedulerConfig({});
+  assert.equal(defaults.endpoint, 'http://127.0.0.1:3000/api/meta-conversions/events/cron');
+  assert.equal(defaults.secretPath, '/run/secrets/automation_cron_secret');
+  const config = resolveSchedulerConfig({
+    META_CONVERSIONS_APP_URL: 'http://isolated_app:3000',
+    META_CONVERSIONS_CRON_SECRET_PATH: '/run/secrets/isolated_cron',
+    META_CONVERSIONS_CRON_INTERVAL_MS: '300000',
+    META_CONVERSIONS_CRON_TIMEOUT_MS: '1000',
+  });
+  assert.equal(config.intervalMs, 300000);
+  assert.equal(config.timeoutMs, 1000);
+  assert.equal(config.secretPath, '/run/secrets/isolated_cron');
+  let calls = 0;
+  await runOnce({ config, readSecret: () => 'private-secret', fetcher: async (url, options) => {
+    calls++;
+    assert.equal(url, 'http://isolated_app:3000/api/meta-conversions/events/cron');
+    assert.equal(options.redirect, 'error');
+    return { status: 200, json: async () => idle };
+  } });
+  assert.equal(calls, 1);
+});
+
+test('unsafe URL and secret paths fail closed before reading secrets or fetching', async () => {
+  for (const env of [
+    { META_CONVERSIONS_APP_URL: 'https://example.com' },
+    { META_CONVERSIONS_APP_URL: 'http://private:password@app:3000' },
+    { META_CONVERSIONS_APP_URL: 'http://app:3000?token=secret' },
+    { META_CONVERSIONS_APP_URL: 'http://app:3000/other' },
+    { META_CONVERSIONS_APP_URL: 'http://app:3000#fragment' },
+    { META_CONVERSIONS_APP_URL: '' },
+    { META_CONVERSIONS_APP_URL: 'file:///run/secrets/key' },
+    { META_CONVERSIONS_CRON_SECRET_PATH: '/run/secrets/../private' },
+    { META_CONVERSIONS_CRON_SECRET_PATH: '/etc/private' },
+  ]) {
+    const result = await runOnce({ config: resolveSchedulerConfig(env),
+      readSecret: () => { throw new Error('must not read'); },
+      fetcher: () => { throw new Error('must not fetch'); },
+    });
+    assert.deepEqual(result, { http_status: null, outcome: 'configuration_unavailable' });
+  }
+});
+
+test('timeout bounds are safe and the configured timeout is passed to AbortSignal', async () => {
+  for (const value of [undefined, '', '-1', '999', '70001', 'Infinity', '1e3']) {
+    assert.equal(resolveCronTimeoutMs(value), 70000);
+  }
+  assert.equal(resolveCronTimeoutMs('1000'), 1000);
+  let observed;
+  const original = AbortSignal.timeout;
+  AbortSignal.timeout = (ms) => { observed = ms; return original(ms); };
+  try {
+    await runOnce({ config: resolveSchedulerConfig({ META_CONVERSIONS_CRON_TIMEOUT_MS: '1000' }),
+      readSecret: () => 'secret', fetcher: async () => ({ status: 200, json: async () => idle }),
+    });
+    assert.equal(observed, 1000);
+  } finally { AbortSignal.timeout = original; }
+});
 
 test('HTTP cron errors retain normal cadence rather than immediate retry', async () => {
   for (const status of [401, 429, 500]) {

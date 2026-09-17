@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // API key store — the *auth-path* data access for public API keys.
 //
@@ -41,7 +42,7 @@ export async function findActiveKeyByHash(
     .maybeSingle();
 
   if (error) {
-    console.error('[api-keys/store] lookup error:', error.message);
+    console.error('[api-keys/store] lookup error:', operationalErrorFields(error));
     return null;
   }
   if (!data) return null;
@@ -87,7 +88,7 @@ export function touchLastUsed(id: string): void {
       if (error) {
         console.warn(
           '[api-keys/store] last_used_at bump failed:',
-          error.message
+          operationalErrorFields(error)
         );
       }
     });

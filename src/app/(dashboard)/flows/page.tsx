@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -116,7 +118,7 @@ export default function FlowsPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error(err);
+          console.error(operationalErrorFields(err));
           toast.error(t("loadError"));
         }
       } finally {
@@ -147,7 +149,7 @@ export default function FlowsPage() {
       setNewName("");
       router.push(`/flows/${json.flow.id}`);
     } catch (err) {
-      console.error(err);
+      console.error(operationalErrorFields(err));
       toast.error(t("createError"));
     } finally {
       setCreating(false);
@@ -186,7 +188,7 @@ export default function FlowsPage() {
       setFlows((prev) => prev.filter((f) => f.id !== flow.id));
       toast.success(t("deleteSuccess"));
     } catch (err) {
-      console.error(err);
+      console.error(operationalErrorFields(err));
       toast.error(t("deleteError"));
     }
   }

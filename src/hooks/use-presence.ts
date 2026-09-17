@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useCallback, useEffect, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -120,7 +122,7 @@ export function usePresence(enabled = true): UsePresenceResult {
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
-          console.error("[usePresence] initial fetch error:", error.message);
+          console.error("[usePresence] initial fetch error:", operationalErrorFields(error));
           return;
         }
         setRows((prev) => {

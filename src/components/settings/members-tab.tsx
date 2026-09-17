@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 // ============================================================
 // MembersTab — Settings → Members
 //
@@ -169,7 +171,7 @@ export function MembersTab() {
         setInvitations([]);
       }
     } catch (err) {
-      console.error('[MembersTab] load error:', err);
+      console.error('[MembersTab] load error:', operationalErrorFields(err));
       toast.error('Could not reach the server');
     } finally {
       setLoading(false);
@@ -221,7 +223,7 @@ export function MembersTab() {
           m.user_id === member.user_id ? { ...m, role: previousRole } : m,
         ),
       );
-      console.error('[MembersTab] role change error:', err);
+      console.error('[MembersTab] role change error:', operationalErrorFields(err));
       toast.error('Could not reach the server');
     } finally {
       setPendingMemberAction(null);
@@ -247,7 +249,7 @@ export function MembersTab() {
       );
       setRemovingMember(null);
     } catch (err) {
-      console.error('[MembersTab] remove error:', err);
+      console.error('[MembersTab] remove error:', operationalErrorFields(err));
       toast.error('Could not reach the server');
     } finally {
       setPendingMemberAction(null);
@@ -267,7 +269,7 @@ export function MembersTab() {
       toast.success(t('revokedToast'));
       setInvitations((prev) => prev.filter((i) => i.id !== invite.id));
     } catch (err) {
-      console.error('[MembersTab] revoke error:', err);
+      console.error('[MembersTab] revoke error:', operationalErrorFields(err));
       toast.error('Could not reach the server');
     }
   }

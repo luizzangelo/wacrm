@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -104,12 +106,12 @@ export function ConversationList({
 
       if (error) {
         // Supabase errors have non-enumerable properties — log fields explicitly
-        console.error("Failed to fetch conversations:", {
+        console.error("Failed to fetch conversations:", operationalErrorFields({
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code,
-        });
+        }));
         setLoading(false);
         return;
       }

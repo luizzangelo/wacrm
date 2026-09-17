@@ -79,7 +79,7 @@ export async function engineSendText(
 
   const sanitized = sanitizePhoneForMeta(contact.phone)
   if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
+    throw new Error('contact phone invalid')
   }
 
   const { data: config, error: configErr } = await db
@@ -189,7 +189,7 @@ export async function engineSendMedia(
 
   const sanitized = sanitizePhoneForMeta(contact.phone)
   if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
+    throw new Error('contact phone invalid')
   }
 
   const { data: config, error: configErr } = await db
@@ -341,7 +341,7 @@ async function sendInteractiveViaMeta(
 
   const sanitized = sanitizePhoneForMeta(contact.phone)
   if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`)
+    throw new Error('contact phone invalid')
   }
 
   const { data: config, error: configErr } = await db

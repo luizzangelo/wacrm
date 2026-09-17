@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 /**
  * Handlers for Meta's template-lifecycle webhook events.
  *
@@ -112,7 +113,7 @@ async function handleStatusUpdate(
   if (!metaTemplateId || !value.event) {
     console.warn(
       '[template-webhook] status update missing message_template_id or event:',
-      value,
+      { template_id_present: value.message_template_id !== undefined, event_present: Boolean(value.event) },
     )
     return
   }
@@ -140,7 +141,7 @@ async function handleStatusUpdate(
     console.error(
       '[template-webhook] status update failed for meta_template_id',
       metaTemplateId,
-      error.message,
+      operationalErrorFields(error),
     )
     return
   }
@@ -148,7 +149,6 @@ async function handleStatusUpdate(
     console.warn(
       '[template-webhook] status update received for unknown template:',
       metaTemplateId,
-      value.message_template_name,
     )
     return
   }
@@ -170,7 +170,7 @@ async function handleQualityUpdate(
   if (!metaTemplateId) {
     console.warn(
       '[template-webhook] quality update missing message_template_id:',
-      value,
+      { template_id_present: value.message_template_id !== undefined },
     )
     return
   }
@@ -190,7 +190,7 @@ async function handleQualityUpdate(
     console.error(
       '[template-webhook] quality update failed for meta_template_id',
       metaTemplateId,
-      error.message,
+      operationalErrorFields(error),
     )
   }
 }
@@ -209,7 +209,6 @@ function handleComponentsUpdate(value: TemplateComponentsUpdateValue): void {
   console.info(
     '[template-webhook] components updated by Meta for template',
     value.message_template_id,
-    value.message_template_name,
     '— run "Sync from Meta" in Settings to pull the new components.',
   )
 }

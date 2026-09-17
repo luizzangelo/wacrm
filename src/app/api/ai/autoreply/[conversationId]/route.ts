@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -52,7 +53,7 @@ export async function POST(request: Request, { params }: Params) {
       .eq('account_id', accountId)
       .maybeSingle()
     if (convErr) {
-      console.error('[ai/autoreply] conversation lookup error:', convErr)
+      console.error('[ai/autoreply] conversation lookup error:', operationalErrorFields(convErr))
       return NextResponse.json(
         { error: 'Failed to load conversation' },
         { status: 500 },
@@ -89,7 +90,7 @@ export async function POST(request: Request, { params }: Params) {
       .eq('id', conversationId)
       .eq('account_id', accountId)
     if (upErr) {
-      console.error('[ai/autoreply] update error:', upErr)
+      console.error('[ai/autoreply] update error:', operationalErrorFields(upErr))
       return NextResponse.json(
         { error: 'Failed to update conversation' },
         { status: 500 },

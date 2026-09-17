@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // POST /api/invitations/[token]/redeem
 //
@@ -46,7 +47,7 @@ function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === "23505") {
     return NextResponse.json({ error: err.message }, { status: 409 });
   }
-  console.error("[redeem] unexpected RPC error:", err);
+  console.error("[redeem] unexpected RPC error:", operationalErrorFields(err));
   return NextResponse.json(
     { error: "Failed to redeem invitation" },
     { status: 500 },

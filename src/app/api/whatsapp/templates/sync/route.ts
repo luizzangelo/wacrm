@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import {
   ForbiddenError,
@@ -303,7 +304,7 @@ export async function POST() {
     ) {
       return toErrorResponse(error)
     }
-    console.error('Error syncing WhatsApp templates:', error)
+    console.error('Error syncing WhatsApp templates:', operationalErrorFields(error))
     return NextResponse.json(
       {
         error:

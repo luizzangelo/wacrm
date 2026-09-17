@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // /api/account
 //
@@ -89,7 +90,7 @@ export async function PATCH(request: Request) {
       .single();
 
     if (error) {
-      console.error("[PATCH /api/account] update error:", error);
+      console.error("[PATCH /api/account] update error:", operationalErrorFields(error));
       return NextResponse.json(
         { error: "Failed to update account" },
         { status: 500 },

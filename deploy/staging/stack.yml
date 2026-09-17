@@ -63,9 +63,12 @@ services:
     image: wacrm-staging:65c593f
     environment:
       META_CONVERSIONS_CRON_INTERVAL_MS: "120000"
+      META_CONVERSIONS_CRON_TIMEOUT_MS: "70000"
+      META_CONVERSIONS_APP_URL: "http://wacrm_staging_app:3000"
+      META_CONVERSIONS_CRON_SECRET_PATH: "/run/secrets/wacrm_staging_automation_cron_secret"
     command: ["node", "/opt/wacrm/meta-conversions-scheduler.mjs"]
     configs:
-      - source: meta_conversions_scheduler_19b_v1
+      - source: meta_conversions_scheduler_21b_v1
         target: /opt/wacrm/meta-conversions-scheduler.mjs
         mode: 0444
     secrets:
@@ -104,7 +107,7 @@ services:
         - traefik.enable=false
 
 configs:
-  meta_conversions_scheduler_19b_v1:
+  meta_conversions_scheduler_21b_v1:
     file: ./meta-conversions-scheduler.mjs
 
 networks:

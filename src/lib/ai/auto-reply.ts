@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { supabaseAdmin } from './admin-client'
 import { loadAiConfig } from './config'
 import { buildConversationContext } from './context'
@@ -174,7 +175,7 @@ export async function dispatchInboundToAiReply(
       // deploy issue — e.g. `claim_ai_reply_slot` not EXECUTE-able by the
       // service role, or the migration not applied. Log it loudly: a
       // silent return makes "auto-reply never fires" undiagnosable.
-      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr)
+      console.error('[ai auto-reply] claim_ai_reply_slot failed:', operationalErrorFields(claimErr))
       return
     }
     if (claimed !== true) return // lost the per-conversation cap race
@@ -188,6 +189,6 @@ export async function dispatchInboundToAiReply(
       aiGenerated: true,
     })
   } catch (err) {
-    console.error('[ai auto-reply] dispatch failed:', err)
+    console.error('[ai auto-reply] dispatch failed:', operationalErrorFields(err))
   }
 }

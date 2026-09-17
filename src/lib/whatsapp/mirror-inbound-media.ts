@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { downloadMedia } from "./meta-api";
 import { extensionForMime } from "@/lib/media/filename";
 import { buildMediaPath, MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
@@ -221,7 +222,7 @@ export async function mirrorInboundMedia(
       // any type at all). Log and let the caller keep the proxy URL.
       console.warn(
         `[mirror-media] upload failed for ${mediaId} (${uploadType}):`,
-        error.message,
+        operationalErrorFields(error),
       );
       return null;
     }
@@ -233,7 +234,7 @@ export async function mirrorInboundMedia(
   } catch (error) {
     console.warn(
       `[mirror-media] could not mirror ${mediaId}:`,
-      error instanceof Error ? error.message : error,
+      operationalErrorFields(error),
     );
     return null;
   }

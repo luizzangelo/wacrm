@@ -1,3 +1,5 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
+import { safeStatusErrorText } from '@/lib/security/operational-log';
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
@@ -137,7 +139,7 @@ export async function GET(request: Request) {
       .select('id, verify_token')
 
     if (configError || !configs) {
-      console.error('Error fetching configs for verification:', configError)
+      console.error('Error fetching configs for verification:', operationalErrorFields(configError))
       return NextResponse.json(
         { error: 'Verification failed' },
         { status: 403 }
@@ -173,7 +175,7 @@ export async function GET(request: Request) {
             if (error) {
               console.warn(
                 '[webhook] verify_token GCM upgrade failed:',
-                (error as { message?: string })?.message ?? error,
+                operationalErrorFields(error),
               )
             }
           })
@@ -190,7 +192,7 @@ export async function GET(request: Request) {
       { status: 403 }
     )
   } catch (error) {
-    console.error('Error in webhook GET verification:', error)
+    console.error('Error in webhook GET verification:', operationalErrorFields(error))
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -238,7 +240,7 @@ export async function POST(request: Request) {
     try {
       await processWebhook(body)
     } catch (error) {
-      console.error('Error processing webhook:', error)
+      console.error('Error processing webhook:', operationalErrorFields(error))
     }
   })
 
@@ -291,7 +293,7 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         console.error(
           'Error fetching whatsapp_config for phone_number_id:',
           phoneNumberId,
-          configError
+          operationalErrorFields(configError)
         )
         continue
       }
@@ -403,50 +405,20 @@ interface WhatsAppStatusUpdate {
   }>
 }
 
-const STATUS_LOG_SECRET_KEYS = [
-  'META_APP_SECRET',
-  'SUPABASE_SERVICE_ROLE_KEY',
-  'ENCRYPTION_KEY',
-  'AUTOMATION_CRON_SECRET',
-] as const
-
-/** Redact credential-shaped fragments before error text reaches stdout. */
-function sanitizeStatusLogText(value: string): string {
-  let sanitized = value
-
-  for (const key of STATUS_LOG_SECRET_KEYS) {
-    const secret = process.env[key]
-    if (secret) sanitized = sanitized.split(secret).join('[REDACTED]')
-  }
-
-  return sanitized
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
-    .replace(
-      /\b(Authorization|access[ _-]?token|app[ _-]?secret|verify[ _-]?token|service[ _-]?role[ _-]?key|encryption[ _-]?key|cron[ _-]?secret|cookie)\b\s*[:=]?\s*[^\s,;]+/gi,
-      '$1=[REDACTED]'
-    )
-    .replace(/\bEAA[A-Za-z0-9_-]{10,}\b/g, '[REDACTED]')
-    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED]')
-    .slice(0, 500)
-}
-
 function sanitizeStatusErrors(errors: WhatsAppStatusUpdate['errors']) {
   return errors?.map((error) => ({
     ...(error.code !== undefined && {
-      code:
-        typeof error.code === 'number'
-          ? error.code
-          : sanitizeStatusLogText(error.code),
+      code: operationalErrorFields(error).error_code ?? 'invalid',
     }),
     ...(error.title !== undefined && {
-      title: sanitizeStatusLogText(error.title),
+      title: safeStatusErrorText(error.title),
     }),
     ...(error.message !== undefined && {
-      message: sanitizeStatusLogText(error.message),
+      message: safeStatusErrorText(error.message),
     }),
     ...(error.error_data?.details !== undefined && {
       error_data: {
-        details: sanitizeStatusLogText(error.error_data.details),
+        details: safeStatusErrorText(error.error_data.details),
       },
     }),
   }))
@@ -461,7 +433,7 @@ function logUnmatchedStatus(
 
   console.warn({
     event: 'whatsapp_unmatched_status',
-    status: sanitizeStatusLogText(status.status),
+    status: ['sent', 'delivered', 'read', 'failed'].includes(status.status) ? status.status : 'invalid',
     timestamp: /^\d+$/.test(status.timestamp) ? status.timestamp : 'invalid',
     message_id: status.id.slice(-8),
     recipient_digit_count: recipientDigits.length,
@@ -486,7 +458,7 @@ async function handleStatusUpdate(
     .eq('message_id', status.id)
 
   if (msgErr) {
-    console.error('Error updating message status:', msgErr)
+    console.error('Error updating message status:', operationalErrorFields(msgErr))
   }
 
   // Webhook fan-out for this status change happens at the END of this
@@ -506,7 +478,7 @@ async function handleStatusUpdate(
     .maybeSingle()
 
   if (recFetchErr) {
-    console.error('Error fetching broadcast recipient:', recFetchErr)
+    console.error('Error fetching broadcast recipient:', operationalErrorFields(recFetchErr))
   } else if (
     recipient &&
     // Guard transitions — forward-only on the success ladder, and
@@ -524,7 +496,7 @@ async function handleStatusUpdate(
       .eq('id', recipient.id)
 
     if (recUpdateErr) {
-      console.error('Error updating broadcast recipient status:', recUpdateErr)
+      console.error('Error updating broadcast recipient status:', operationalErrorFields(recUpdateErr))
     }
   }
 
@@ -598,10 +570,10 @@ async function flagBroadcastReplyIfAny(accountId: string, contactId: string) {
       .eq('id', row.id)
 
     if (updErr) {
-      console.error('Error marking broadcast recipient replied:', updErr)
+      console.error('Error marking broadcast recipient replied:', operationalErrorFields(updErr))
     }
   } catch (err) {
-    console.error('flagBroadcastReplyIfAny failed:', err)
+    console.error('flagBroadcastReplyIfAny failed:', operationalErrorFields(err))
   }
 }
 
@@ -621,7 +593,7 @@ async function lookupInternalIdByMetaId(
     .eq('conversation_id', conversationId)
     .maybeSingle()
   if (error) {
-    console.error('[webhook] lookupInternalIdByMetaId failed:', error.message)
+    console.error('[webhook] lookupInternalIdByMetaId failed:', operationalErrorFields(error))
     return null
   }
   return data?.id ?? null
@@ -650,7 +622,7 @@ async function handleReaction(
   if (!targetInternalId) {
     console.warn(
       '[webhook] reaction target message not found; skipping',
-      reaction.message_id
+          reaction.message_id.slice(-8)
     )
     return
   }
@@ -664,7 +636,7 @@ async function handleReaction(
       .eq('actor_type', 'customer')
       .eq('actor_id', contactId)
     if (delError) {
-      console.error('[webhook] reaction delete failed:', delError.message)
+      console.error('[webhook] reaction delete failed:', operationalErrorFields(delError))
     }
     return
   }
@@ -682,7 +654,7 @@ async function handleReaction(
       { onConflict: 'message_id,actor_type,actor_id' }
     )
   if (upsertError) {
-    console.error('[webhook] reaction upsert failed:', upsertError.message)
+    console.error('[webhook] reaction upsert failed:', operationalErrorFields(upsertError))
   }
 }
 
@@ -763,7 +735,7 @@ async function processMessage(
     if (!replyToInternalId) {
       console.warn(
         '[webhook] reply context parent not found:',
-        message.context.id
+        message.context.id.slice(-8)
       )
     }
   }
@@ -824,7 +796,7 @@ async function processMessage(
         // extension from the fetched blob — impossible to do until the
         // bytes had already been fetched successfully.
         media_type: mediaType,
-        message_id: message.id,
+        message_id: message.id.slice(-8),
         status: 'delivered',
         created_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
         reply_to_message_id: replyToInternalId,
@@ -838,7 +810,7 @@ async function processMessage(
     .select('id')
 
   if (msgError) {
-    console.error('Error inserting message:', msgError)
+    console.error('Error inserting message:', operationalErrorFields(msgError))
     return
   }
 
@@ -870,7 +842,7 @@ async function processMessage(
         message_id: message.id,
         ctwa_clid: maskCtwaClid(message.referral.ctwa_clid),
         status: 'failed',
-        error_code: code,
+        error_code: operationalErrorFields({ code }).error_code ?? 'unknown',
       })
     }
   }
@@ -882,7 +854,7 @@ async function processMessage(
   if (!insertedRows || insertedRows.length === 0) {
     console.info(
       '[webhook] duplicate inbound message ignored (idempotent replay):',
-      message.id
+      message.id.slice(-8)
     )
     return
   }
@@ -903,7 +875,7 @@ async function processMessage(
   )
 
   if (convError) {
-    console.error('Error updating conversation:', convError)
+    console.error('Error updating conversation:', operationalErrorFields(convError))
   }
 
   // A customer writing again re-opens the thread (issue #409). Kept as a
@@ -1011,7 +983,7 @@ async function processMessage(
         // trigger's exact-id match.
         interactive_reply_id: interactiveReplyId ?? undefined,
       },
-    }).catch((err) => console.error('[automations] dispatch failed:', err))
+    }).catch((err) => console.error('[automations] dispatch failed:', operationalErrorFields(err)))
   }
 
   // AI auto-reply. Runs only for plain-text inbound the deterministic
@@ -1059,10 +1031,7 @@ async function processMessage(
         account_id: accountId,
         attribution_id: capturedAttributionId,
         status: 'failed',
-        error_code:
-          error && typeof error === 'object' && 'code' in error
-            ? String(error.code).slice(0, 64)
-            : 'unknown',
+        error_code: operationalErrorFields(error).error_code ?? 'unknown',
       })
     }
   }
@@ -1130,7 +1099,7 @@ async function parseMessageContent(
     } catch (error) {
       console.error(
         `Failed to verify media ${mediaId} with Meta:`,
-        error instanceof Error ? error.message : error
+        operationalErrorFields(error)
       )
       return null
     }
@@ -1337,7 +1306,7 @@ async function findOrCreateContact(
       const raced = await findExistingContact(supabaseAdmin(), accountId, phone)
       if (raced) return { contact: raced, wasCreated: false }
     }
-    console.error('Error creating contact:', createError)
+    console.error('Error creating contact:', operationalErrorFields(createError))
     return null
   }
 
@@ -1371,7 +1340,7 @@ async function findOrCreateConversation(
     .limit(1)
 
   if (findError) {
-    console.error('Error finding conversation:', findError)
+    console.error('Error finding conversation:', operationalErrorFields(findError))
     return null
   }
 
@@ -1408,7 +1377,7 @@ async function findOrCreateConversation(
         return { conversation: raced[0], created: false }
       }
     }
-    console.error('Error creating conversation:', createError)
+    console.error('Error creating conversation:', operationalErrorFields(createError))
     return null
   }
 

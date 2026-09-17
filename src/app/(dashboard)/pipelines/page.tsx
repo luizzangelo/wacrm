@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { attachDealConversationSummaries } from '@/lib/deals/card-context';
@@ -88,7 +90,7 @@ export default function PipelinesPage() {
       .order('created_at')
       .order('id');
     if (error) {
-      console.error('Failed to load pipelines:', error.message);
+      console.error('Failed to load pipelines:', operationalErrorFields(error));
       return [];
     }
     return data ?? [];
@@ -153,7 +155,7 @@ export default function PipelinesPage() {
         .single();
 
       if (error || !pipeline) {
-        console.error('Failed to seed pipeline:', error?.message);
+        console.error('Failed to seed pipeline:', operationalErrorFields(error));
         return null;
       }
 

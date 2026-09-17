@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -68,7 +70,7 @@ export default function NewBroadcastPage() {
       // Previously swallowed with console.error — the wizard would
       // just no-op, leaving the user confused. Surface the reason.
       const message = err instanceof Error ? err.message : 'Broadcast failed';
-      console.error('Broadcast failed:', err);
+      console.error('Broadcast failed:', operationalErrorFields(err));
       toast.error(message);
     }
   }

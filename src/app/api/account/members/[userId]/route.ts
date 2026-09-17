@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // /api/account/members/[userId]
 //
@@ -35,7 +36,7 @@ function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === "22023") {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
-  console.error("[members route] unexpected RPC error:", err);
+  console.error("[members route] unexpected RPC error:", operationalErrorFields(err));
   return NextResponse.json(
     { error: "Failed to update member" },
     { status: 500 },

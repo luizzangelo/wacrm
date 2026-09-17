@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AiProvider, AiUsage } from './types'
 
@@ -43,9 +44,9 @@ export async function logAiUsage(
       total_tokens: args.usage.totalTokens,
     })
     if (error) {
-      console.error('[ai usage] log insert failed:', error)
+      console.error('[ai usage] log insert failed:', operationalErrorFields(error))
     }
   } catch (err) {
-    console.error('[ai usage] log insert threw:', err)
+    console.error('[ai usage] log insert threw:', operationalErrorFields(err))
   }
 }

@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 // ============================================================
 // /join/[token] — invitation redemption landing page.
 //
@@ -126,7 +128,7 @@ export default function JoinPage() {
       setPeek(peekBody);
       setAuthedUserId(authRes.data.user?.id ?? null);
     } catch (err) {
-      console.error('[join] peek error:', err);
+      console.error('[join] peek error:', operationalErrorFields(err));
       setPeek({ ok: false, reason: 'server_error' });
       setAuthedUserId(null);
     }
@@ -152,7 +154,7 @@ export default function JoinPage() {
         setPeek(peekBody);
         setAuthedUserId(authRes.data.user?.id ?? null);
       } catch (err) {
-        console.error('[join] peek error:', err);
+        console.error('[join] peek error:', operationalErrorFields(err));
         if (cancelled) return;
         setPeek({ ok: false, reason: 'server_error' });
         setAuthedUserId(null);
@@ -196,7 +198,7 @@ export default function JoinPage() {
       // the profile with the new account_id and account_role.
       window.location.href = '/dashboard';
     } catch (err) {
-      console.error('[join] redeem error:', err);
+      console.error('[join] redeem error:', operationalErrorFields(err));
       toast.error('Could not reach the server');
       setAccepting(false);
     }
@@ -211,7 +213,7 @@ export default function JoinPage() {
       // the URL so the rebuilt page renders the signed-out CTA path.
       window.location.reload();
     } catch (err) {
-      console.error('[join] sign-out error:', err);
+      console.error('[join] sign-out error:', operationalErrorFields(err));
       toast.error('Could not sign out. Try refreshing the page.');
       setSigningOut(false);
     }

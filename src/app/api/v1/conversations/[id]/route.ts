@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET /api/v1/conversations/{id} — read one conversation
 // (scope: conversations:read). Account-scoped: a foreign id → 404.
@@ -28,7 +29,7 @@ export async function GET(
       .maybeSingle();
 
     if (error) {
-      console.error('[api/v1/conversations] read error:', error);
+      console.error('[api/v1/conversations] read error:', operationalErrorFields(error));
       return fail('internal', 'Failed to read conversation', 500);
     }
     if (!data) return fail('not_found', 'Conversation not found', 404);

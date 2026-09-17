@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET /api/account/members
 //
@@ -40,7 +41,7 @@ export async function GET() {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("[GET /api/account/members] fetch error:", error);
+      console.error("[GET /api/account/members] fetch error:", operationalErrorFields(error));
       return NextResponse.json(
         { error: "Failed to load members" },
         { status: 500 },

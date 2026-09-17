@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // DELETE /api/account/invitations/[id]
 //
@@ -49,7 +50,7 @@ export async function DELETE(
       .eq("id", id);
 
     if (error) {
-      console.error("[DELETE /api/account/invitations/[id]] error:", error);
+      console.error("[DELETE /api/account/invitations/[id]] error:", operationalErrorFields(error));
       return NextResponse.json(
         { error: "Failed to revoke invitation" },
         { status: 500 },

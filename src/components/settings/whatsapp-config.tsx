@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
@@ -127,7 +129,7 @@ export function WhatsAppConfig() {
         .maybeSingle();
 
       if (error) {
-        console.error('Failed to load config row:', error);
+        console.error('Failed to load config row:', operationalErrorFields(error));
       }
 
       if (data) {
@@ -170,7 +172,7 @@ export function WhatsAppConfig() {
             setStatusMessage(payload.message || '');
           }
         } catch (err) {
-          console.error('Health check failed:', err);
+          console.error('Health check failed:', operationalErrorFields(err));
           setConnectionStatus('disconnected');
         }
       } else {
@@ -179,7 +181,7 @@ export function WhatsAppConfig() {
         setStatusMessage('');
       }
     } catch (err) {
-      console.error('fetchConfig error:', err);
+      console.error('fetchConfig error:', operationalErrorFields(err));
       toast.error('Failed to load WhatsApp configuration');
     } finally {
       setLoading(false);
@@ -218,7 +220,7 @@ export function WhatsAppConfig() {
       if (error) throw new Error(error.message);
       setConfig({ ...config, mirror_inbound_media: next });
     } catch (error) {
-      console.error('Failed to update media retention setting:', error);
+      console.error('Failed to update media retention setting:', operationalErrorFields(error));
       setMirrorMedia(previous);
       toast.error(t('mirrorInboundSaveFailed'));
     } finally {
@@ -314,7 +316,7 @@ export function WhatsAppConfig() {
 
       if (accountId) await fetchConfig(accountId);
     } catch (err) {
-      console.error('Save error:', err);
+      console.error('Save error:', operationalErrorFields(err));
       toast.error('Failed to save configuration');
     } finally {
       setSaving(false);
@@ -343,7 +345,7 @@ export function WhatsAppConfig() {
         toast.error(payload.message || 'API connection failed');
       }
     } catch (err) {
-      console.error('Test connection error:', err);
+      console.error('Test connection error:', operationalErrorFields(err));
       setConnectionStatus('disconnected');
       toast.error('Connection test failed. Check network and try again.');
     } finally {
@@ -370,7 +372,7 @@ export function WhatsAppConfig() {
       }
       if (accountId) await fetchConfig(accountId);
     } catch (err) {
-      console.error('verify-registration failed:', err);
+      console.error('verify-registration failed:', operationalErrorFields(err));
       toast.error('Could not reach the verification endpoint.');
     } finally {
       setVerifyingRegistration(false);
@@ -403,7 +405,7 @@ export function WhatsAppConfig() {
       setResetReason(null);
       setStatusMessage('');
     } catch (err) {
-      console.error('Reset error:', err);
+      console.error('Reset error:', operationalErrorFields(err));
       toast.error('Failed to reset configuration');
     } finally {
       setResetting(false);

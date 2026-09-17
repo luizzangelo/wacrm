@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -198,7 +200,7 @@ export function TemplateManager() {
       if (error) throw error;
       setTemplates(data || []);
     } catch (err) {
-      console.error('Failed to fetch templates:', err);
+      console.error('Failed to fetch templates:', operationalErrorFields(err));
       toast.error(t('toastLoadFailed'));
     } finally {
       setLoading(false);
@@ -294,7 +296,7 @@ export function TemplateManager() {
       setForm(emptyForm);
       setEditingId(null);
     } catch (err) {
-      console.error('Submit error:', err);
+      console.error('Submit error:', operationalErrorFields(err));
       toast.error(err instanceof Error ? err.message : t('toastSubmitFailed'));
     } finally {
       setSubmitting(false);
@@ -336,7 +338,7 @@ export function TemplateManager() {
       }
       await fetchTemplates(user.id);
     } catch (err) {
-      console.error('Template sync error:', err);
+      console.error('Template sync error:', operationalErrorFields(err));
       toast.error(err instanceof Error ? err.message : t('toastSyncError'));
     } finally {
       setSyncing(false);
@@ -362,7 +364,7 @@ export function TemplateManager() {
       setTemplates((prev) => prev.filter((t) => t.id !== target.id));
       setTemplateToDelete(null);
     } catch (err) {
-      console.error('Delete error:', err);
+      console.error('Delete error:', operationalErrorFields(err));
       toast.error(err instanceof Error ? err.message : t('toastDeleteError'));
     } finally {
       setDeletingId(null);

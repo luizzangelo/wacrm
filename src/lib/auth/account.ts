@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Server-side account context — for API routes and server
 // components. Reads the caller's profile + account in one round
@@ -70,7 +71,7 @@ export function toErrorResponse(err: unknown): NextResponse {
   if (err instanceof UnauthorizedError || err instanceof ForbiddenError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
-  console.error("[toErrorResponse] uncategorized error:", err);
+  console.error("[toErrorResponse] uncategorized error:", operationalErrorFields(err));
   return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 }
 
@@ -121,7 +122,7 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     .maybeSingle();
 
   if (error) {
-    console.error("[getCurrentAccount] profile fetch error:", error);
+    console.error("[getCurrentAccount] profile fetch error:", operationalErrorFields(error));
     throw new ForbiddenError("Could not load account context");
   }
   if (!data || !data.account_id || !data.account_role) {
@@ -154,7 +155,7 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     .maybeSingle();
 
   if (accountErr) {
-    console.error("[getCurrentAccount] account fetch error:", accountErr);
+    console.error("[getCurrentAccount] account fetch error:", operationalErrorFields(accountErr));
     throw new ForbiddenError("Could not load account context");
   }
   if (!account) {

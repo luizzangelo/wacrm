@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type {
   Automation,
   AutomationLogStepResult,
@@ -83,7 +84,7 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
         .eq('account_id', input.accountId)
         .maybeSingle()
       if (ownErr) {
-        console.error('[automations] contact ownership check failed:', ownErr)
+        console.error('[automations] contact ownership check failed:', operationalErrorFields(ownErr))
         return
       }
       if (!owned) {
@@ -100,7 +101,7 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
       .eq('is_active', true)
 
     if (error) {
-      console.error('[automations] fetch failed:', error)
+      console.error('[automations] fetch failed:', operationalErrorFields(error))
       return
     }
     if (!automations || automations.length === 0) return
@@ -110,11 +111,11 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
       try {
         await executeAutomation(automation, input)
       } catch (err) {
-        console.error('[automations] execute failed:', automation.id, err)
+        console.error('[automations] execute failed:', automation.id, operationalErrorFields(err))
       }
     }
   } catch (err) {
-    console.error('[automations] dispatch failed:', err)
+    console.error('[automations] dispatch failed:', operationalErrorFields(err))
   }
 }
 
@@ -146,7 +147,7 @@ export async function resumePendingExecution(pending: {
     .single()
 
   if (error || !automation) {
-    console.error('[automations] resume: missing automation', pending.automation_id, error)
+    console.error('[automations] resume: missing automation', pending.automation_id, operationalErrorFields(error))
     await markPending(pending.id, 'failed')
     return
   }
@@ -164,7 +165,7 @@ export async function resumePendingExecution(pending: {
     })
     await markPending(pending.id, 'done')
   } catch (err) {
-    console.error('[automations] resume failed:', err)
+    console.error('[automations] resume failed:', operationalErrorFields(err))
     await markPending(pending.id, 'failed')
   }
 }
@@ -203,7 +204,7 @@ async function executeAutomation(automation: Automation, input: DispatchInput) {
     .single()
 
   if (logErr || !log) {
-    console.error('[automations] cannot create log:', logErr)
+    console.error('[automations] cannot create log:', operationalErrorFields(logErr))
     return
   }
 
@@ -226,7 +227,7 @@ async function executeAutomation(automation: Automation, input: DispatchInput) {
     p_automation_id: automation.id,
   })
   if (rpcErr) {
-    console.error('[automations] increment counter failed:', rpcErr)
+    console.error('[automations] increment counter failed:', operationalErrorFields(rpcErr))
   }
 }
 

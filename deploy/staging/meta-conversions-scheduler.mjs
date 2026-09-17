@@ -17,13 +17,41 @@ export function resolveCronIntervalMs(value) {
     : DEFAULT_INTERVAL_MS;
 }
 
-export const INTERVAL_MS = resolveCronIntervalMs(
-  process.env.META_CONVERSIONS_CRON_INTERVAL_MS
-);
-export const REQUEST_TIMEOUT_MS = 70_000;
-export const ENDPOINT =
-  'http://wacrm_staging_app:3000/api/meta-conversions/events/cron';
-const SECRET_PATH = '/run/secrets/wacrm_staging_automation_cron_secret';
+export const DEFAULT_TIMEOUT_MS = 70_000;
+
+export function resolveCronTimeoutMs(value) {
+  const timeout = typeof value === 'string' && /^\d+$/.test(value.trim())
+    ? Number(value.trim()) : NaN;
+  return Number.isSafeInteger(timeout) && timeout >= 1_000 && timeout <= 70_000
+    ? timeout : DEFAULT_TIMEOUT_MS;
+}
+
+export function resolveSchedulerConfig(env = process.env) {
+  // Loopback default cannot accidentally target another environment or send
+  // the secret to a public server. Separate-container deployments set the URL.
+  let endpoint = null;
+  try {
+    const url = new URL(env.META_CONVERSIONS_APP_URL ?? 'http://127.0.0.1:3000');
+    const internalHost = /^(?:[a-z_][a-z0-9_-]*|localhost|127\.0\.0\.1)$/.test(url.hostname)
+      || /^(?:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(url.hostname);
+    if (['http:', 'https:'].includes(url.protocol) && internalHost &&
+      !url.username && !url.password && !url.search && !url.hash && url.pathname === '/') {
+      endpoint = new URL('/api/meta-conversions/events/cron', url).href;
+    }
+  } catch { /* Invalid explicit configuration fails closed. */ }
+  const secretPath = env.META_CONVERSIONS_CRON_SECRET_PATH ?? '/run/secrets/automation_cron_secret';
+  return Object.freeze({
+    endpoint,
+    secretPath: /^\/run\/secrets\/[a-zA-Z0-9_-]+$/.test(secretPath) ? secretPath : null,
+    intervalMs: resolveCronIntervalMs(env.META_CONVERSIONS_CRON_INTERVAL_MS),
+    timeoutMs: resolveCronTimeoutMs(env.META_CONVERSIONS_CRON_TIMEOUT_MS),
+  });
+}
+
+const CONFIG = resolveSchedulerConfig();
+export const INTERVAL_MS = CONFIG.intervalMs;
+export const REQUEST_TIMEOUT_MS = CONFIG.timeoutMs;
+export const ENDPOINT = CONFIG.endpoint;
 const HEARTBEAT_PATH = '/tmp/meta-conversions-scheduler-heartbeat';
 
 function count(value) {
@@ -51,9 +79,13 @@ export function sanitizedCounts(body) {
 
 // Exactly one request per scheduled window; never retry a transport failure.
 export async function runOnce({
+  config = CONFIG,
   fetcher = fetch,
-  readSecret = () => readFileSync(SECRET_PATH, 'utf8'),
+  readSecret = () => readFileSync(config.secretPath, 'utf8'),
 } = {}) {
+  if (!config.endpoint || !config.secretPath) {
+    return { http_status: null, outcome: 'configuration_unavailable' };
+  }
   let secret;
   try {
     secret = readSecret().trim();
@@ -63,11 +95,11 @@ export async function runOnce({
   }
 
   try {
-    const response = await fetcher(ENDPOINT, {
+    const response = await fetcher(config.endpoint, {
       method: 'GET',
       headers: { 'x-cron-secret': secret },
       redirect: 'error',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(config.timeoutMs),
     });
     if (response.status !== 200) {
       return { http_status: response.status, outcome: 'http_error' };

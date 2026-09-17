@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // POST /api/account/transfer-ownership
 //
@@ -35,7 +36,7 @@ function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === "22023") {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
-  console.error("[transfer-ownership] unexpected RPC error:", err);
+  console.error("[transfer-ownership] unexpected RPC error:", operationalErrorFields(err));
   return NextResponse.json(
     { error: "Failed to transfer ownership" },
     { status: 500 },

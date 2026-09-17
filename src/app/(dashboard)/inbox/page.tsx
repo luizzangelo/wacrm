@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -141,12 +143,12 @@ function InboxPageInner() {
       if (error) {
         // Supabase errors have non-enumerable properties — log fields
         // explicitly so the console message isn't just `{}`.
-        console.error("Failed to hydrate conversation:", {
+        console.error("Failed to hydrate conversation:", operationalErrorFields({
           message: error.message,
           details: error.details,
           hint: error.hint,
           code: error.code,
-        });
+        }));
         return;
       }
       if (!data) return;

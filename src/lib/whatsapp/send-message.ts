@@ -1,3 +1,5 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
+import { recipientLogFields } from '@/lib/security/operational-log';
 // ============================================================
 // Outbound message send — the core that both the dashboard's
 // `/api/whatsapp/send` route and the public `/api/v1/messages`
@@ -278,7 +280,7 @@ export async function sendMessageToConversation(
         if (error) {
           console.warn(
             '[send-message] access_token GCM upgrade failed:',
-            error.message
+            operationalErrorFields(error)
           );
         }
       });
@@ -424,7 +426,8 @@ export async function sendMessageToConversation(
         }
         lastError = err;
         console.warn(
-          `[send-message] variant "${variant}" rejected by Meta, trying next…`
+          '[send-message] variant rejected by Meta, trying next…',
+          recipientLogFields(variant)
         );
       }
     }
@@ -433,13 +436,14 @@ export async function sendMessageToConversation(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : 'Unknown Meta API error';
-    console.error('[send-message] Meta send failed for all variants:', message);
+    console.error('[send-message] Meta send failed for all variants:', operationalErrorFields(err));
     throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
   }
 
   if (workingPhone !== sanitizedPhone) {
     console.log(
-      `[send-message] Auto-corrected contact phone: ${sanitizedPhone} → ${workingPhone}`
+      '[send-message] Auto-corrected contact phone',
+      { before: recipientLogFields(sanitizedPhone), after: recipientLogFields(workingPhone) }
     );
     await db
       .from('contacts')
@@ -487,7 +491,7 @@ export async function sendMessageToConversation(
     .single();
 
   if (msgError) {
-    console.error('[send-message] error inserting sent message:', msgError);
+    console.error('[send-message] error inserting sent message:', operationalErrorFields(msgError));
     throw new SendMessageError(
       'db_error',
       `Message sent to Meta but failed to save to DB: ${msgError.message}`,
@@ -523,12 +527,12 @@ export async function sendMessageToConversation(
       .eq('contact_id', contact.id)
       .eq('status', 'active');
     if (pauseErr) {
-      console.error('[flows] pause-on-agent-send failed:', pauseErr.message);
+      console.error('[flows] pause-on-agent-send failed:', operationalErrorFields(pauseErr));
     }
   } catch (err) {
     console.error(
       '[flows] pause-on-agent-send threw:',
-      err instanceof Error ? err.message : err
+      operationalErrorFields(err)
     );
   }
 

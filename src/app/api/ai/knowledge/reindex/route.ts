@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -24,7 +25,7 @@ export async function POST() {
       .select('id, content')
       .eq('account_id', accountId)
     if (error) {
-      console.error('[ai/knowledge/reindex] fetch error:', error)
+      console.error('[ai/knowledge/reindex] fetch error:', operationalErrorFields(error))
       return NextResponse.json(
         { error: 'Failed to load documents' },
         { status: 500 },
@@ -59,7 +60,7 @@ export async function POST() {
         // One bad document (e.g. a mid-run embeddings rate-limit) should
         // not abort the whole batch.
         const message = err instanceof AiError ? err.message : String(err)
-        console.error(`[ai/knowledge/reindex] doc ${doc.id} failed:`, message)
+        console.error(`[ai/knowledge/reindex] doc ${doc.id} failed:`, operationalErrorFields(message))
         return NextResponse.json(
           {
             success: false,

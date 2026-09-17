@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { encrypt } from '@/lib/whatsapp/encryption';
@@ -57,10 +58,7 @@ export class MetaConversionsConfigError extends Error {
 }
 
 function databaseError(operation: string, error: unknown): never {
-  const code =
-    error && typeof error === 'object' && 'code' in error
-      ? String(error.code)
-      : 'unknown';
+  const code = operationalErrorFields(error).error_code ?? 'unknown';
   console.error(`[meta-conversions] ${operation} failed`, { code });
   throw new MetaConversionsConfigError('Falha ao acessar a configuração', 500);
 }

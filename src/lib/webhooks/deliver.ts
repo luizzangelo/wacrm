@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Outbound webhook delivery.
 //
@@ -79,7 +80,7 @@ export async function dispatchWebhookEvent(
     );
   } catch (err) {
     // Never let a delivery problem bubble into the webhook response.
-    console.error('[webhooks] dispatch failed:', err);
+    console.error('[webhooks] dispatch failed:', operationalErrorFields(err));
   }
 }
 
@@ -105,7 +106,7 @@ async function deliverOne(
   } catch (err) {
     // A row whose secret can't be decrypted can never produce a valid
     // signature — count it as a failure so it eventually auto-disables.
-    console.error('[webhooks] secret decrypt failed for', row.id, err);
+    console.error('[webhooks] secret decrypt failed for', row.id, operationalErrorFields(err));
     await recordFailure(db, row);
     return;
   }
@@ -136,7 +137,7 @@ async function deliverOne(
   } catch (err) {
     console.warn(
       `[webhooks] delivery to ${row.id} failed:`,
-      err instanceof Error ? err.message : err
+      operationalErrorFields(err)
     );
     await recordFailure(db, row);
   }
@@ -153,6 +154,6 @@ async function recordFailure(db: SupabaseClient, row: EndpointRow): Promise<void
     max_failures: MAX_CONSECUTIVE_FAILURES,
   });
   if (error) {
-    console.error('[webhooks] record_webhook_failure failed for', row.id, error);
+    console.error('[webhooks] record_webhook_failure failed for', row.id, operationalErrorFields(error));
   }
 }

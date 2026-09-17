@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
@@ -248,7 +249,7 @@ export async function POST(request: Request) {
     ) {
       return toErrorResponse(error)
     }
-    console.error('Error submitting template:', error)
+    console.error('Error submitting template:', operationalErrorFields(error))
     return NextResponse.json(
       {
         error:

@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { MessageTemplate } from "@/types";
@@ -119,7 +121,7 @@ export function TemplatePicker({
 
       if (cancelled) return;
       if (error) {
-        console.error("Failed to fetch templates:", error);
+        console.error("Failed to fetch templates:", operationalErrorFields(error));
         setTemplates([]);
       } else {
         setTemplates((data as MessageTemplate[]) ?? []);

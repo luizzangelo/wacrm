@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-      console.error('[ai/test] validation error:', err)
+      console.error('[ai/test] validation error:', operationalErrorFields(err))
       return NextResponse.json(
         { error: 'Could not validate the API key.' },
         { status: 400 },

@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 /**
  * Flow runner.
  *
@@ -217,7 +218,7 @@ async function loadActiveRunForContact(
     .order("started_at", { ascending: false })
     .limit(1);
   if (error) {
-    console.error("[flows] loadActiveRunForContact error:", error.message);
+    console.error("[flows] loadActiveRunForContact error:", operationalErrorFields(error));
     return null;
   }
   const rows = (data as FlowRunRow[] | null) ?? [];
@@ -234,7 +235,7 @@ async function loadFlow(
     .eq("id", flowId)
     .maybeSingle();
   if (error) {
-    console.error("[flows] loadFlow error:", error.message);
+    console.error("[flows] loadFlow error:", operationalErrorFields(error));
     return null;
   }
   return (data as FlowRow | null) ?? null;
@@ -258,7 +259,7 @@ async function loadAllNodes(
     .select("*")
     .eq("flow_id", flowId);
   if (error) {
-    console.error("[flows] loadAllNodes error:", error.message);
+    console.error("[flows] loadAllNodes error:", operationalErrorFields(error));
     return new Map();
   }
   const map = new Map<string, FlowNodeRow>();
@@ -292,7 +293,7 @@ async function logEvent(
   });
   if (error) {
     // Logging failure is non-fatal — surface but don't throw.
-    console.error("[flows] logEvent error:", error.message);
+    console.error("[flows] logEvent error:", operationalErrorFields(error));
   }
 }
 
@@ -854,7 +855,7 @@ async function advanceCurrentNodeKey(
   }
   const { data, error } = await q.select("id");
   if (error) {
-    console.error("[flows] advanceCurrentNodeKey error:", error.message);
+    console.error("[flows] advanceCurrentNodeKey error:", operationalErrorFields(error));
     return false;
   }
   return Array.isArray(data) && data.length > 0;
@@ -913,7 +914,7 @@ export async function dispatchInboundToFlows(
   } catch (err) {
     console.error(
       "[flows] dispatchInboundToFlows threw:",
-      err instanceof Error ? err.message : err,
+      operationalErrorFields(err),
     );
     return { consumed: false, outcome: "no_match" };
   }
@@ -1120,7 +1121,7 @@ async function startNewRun(
     if (msg.includes("23505") || msg.includes("duplicate key")) {
       return { consumed: true, outcome: "duplicate_inbound_ignored" };
     }
-    console.error("[flows] startNewRun insert error:", insErr.message);
+    console.error("[flows] startNewRun insert error:", operationalErrorFields(insErr));
     return { consumed: false, outcome: "no_match" };
   }
   const run = inserted as FlowRunRow;
@@ -1142,7 +1143,7 @@ async function startNewRun(
   });
   if (incErr) {
     // Non-fatal — the run itself succeeded; only the counter is off.
-    console.error("[flows] execution_count rpc error:", incErr.message);
+    console.error("[flows] execution_count rpc error:", operationalErrorFields(incErr));
   }
 
   // Run the advance loop starting from the entry node.

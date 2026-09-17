@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -221,7 +223,7 @@ export function MessageThread({
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
-          console.error("Failed to fetch profiles:", error);
+          console.error("Failed to fetch profiles:", operationalErrorFields(error));
           return;
         }
         setProfiles((data as Profile[]) ?? []);
@@ -308,7 +310,7 @@ export function MessageThread({
       if (cancelled) return;
 
       if (error) {
-        console.error("Failed to fetch messages:", error);
+        console.error("Failed to fetch messages:", operationalErrorFields(error));
       } else {
         onMessagesLoadedRef.current(data ?? []);
       }
@@ -344,7 +346,7 @@ export function MessageThread({
         .eq("conversation_id", conversationId);
       if (cancelled) return;
       if (error) {
-        console.error("Failed to fetch reactions:", error);
+        console.error("Failed to fetch reactions:", operationalErrorFields(error));
         return;
       }
       setReactions((data as MessageReaction[]) ?? []);
@@ -451,7 +453,7 @@ export function MessageThread({
       .update({ unread_count: 0 })
       .eq("id", conversationId)
       .then(({ error }) => {
-        if (error) console.error("Failed to reset unread_count:", error);
+        if (error) console.error("Failed to reset unread_count:", operationalErrorFields(error));
       });
   }, [conversationId, hasUnread]);
 
@@ -499,7 +501,7 @@ export function MessageThread({
 
         if (!res.ok) {
           const reason = payload?.error || `HTTP ${res.status}`;
-          console.error("Failed to send message:", reason);
+          console.error("Failed to send message:", operationalErrorFields(reason));
           toast.error(`Failed to send: ${reason}`);
           // Mark the optimistic bubble as failed so the user sees what happened
           onUpdateMessage(tempId, { status: "failed" });
@@ -511,7 +513,7 @@ export function MessageThread({
         // flip status to 'sent' so the UI stops showing "sending".
         onUpdateMessage(tempId, { status: "sent" });
       } catch (err) {
-        console.error("Failed to send message:", err);
+        console.error("Failed to send message:", operationalErrorFields(err));
         const reason = err instanceof Error ? err.message : "network error";
         toast.error(`Failed to send: ${reason}`);
         onUpdateMessage(tempId, { status: "failed" });
@@ -565,7 +567,7 @@ export function MessageThread({
 
         if (!res.ok) {
           const reason = data?.error || `HTTP ${res.status}`;
-          console.error("Failed to send media:", reason);
+          console.error("Failed to send media:", operationalErrorFields(reason));
           toast.error(`Failed to send: ${reason}`);
           onUpdateMessage(tempId, { status: "failed" });
           // The upload never reached the recipient — GC the orphaned
@@ -576,7 +578,7 @@ export function MessageThread({
 
         onUpdateMessage(tempId, { status: "sent" });
       } catch (err) {
-        console.error("Failed to send media:", err);
+        console.error("Failed to send media:", operationalErrorFields(err));
         const reason = err instanceof Error ? err.message : "network error";
         toast.error(`Failed to send: ${reason}`);
         onUpdateMessage(tempId, { status: "failed" });
@@ -622,7 +624,7 @@ export function MessageThread({
 
         if (!res.ok) {
           const reason = data?.error || `HTTP ${res.status}`;
-          console.error("Failed to send interactive message:", reason);
+          console.error("Failed to send interactive message:", operationalErrorFields(reason));
           toast.error(`Failed to send: ${reason}`);
           onUpdateMessage(tempId, { status: "failed" });
           return;
@@ -630,7 +632,7 @@ export function MessageThread({
 
         onUpdateMessage(tempId, { status: "sent" });
       } catch (err) {
-        console.error("Failed to send interactive message:", err);
+        console.error("Failed to send interactive message:", operationalErrorFields(err));
         const reason = err instanceof Error ? err.message : "network error";
         toast.error(`Failed to send: ${reason}`);
         onUpdateMessage(tempId, { status: "failed" });
@@ -711,7 +713,7 @@ export function MessageThread({
 
         if (!res.ok) {
           const reason = payload?.error || `HTTP ${res.status}`;
-          console.error("Failed to send template:", reason);
+          console.error("Failed to send template:", operationalErrorFields(reason));
           toast.error(`Failed to send template: ${reason}`);
           onUpdateMessage(tempId, { status: "failed" });
           return;
@@ -719,7 +721,7 @@ export function MessageThread({
 
         onUpdateMessage(tempId, { status: "sent" });
       } catch (err) {
-        console.error("Failed to send template:", err);
+        console.error("Failed to send template:", operationalErrorFields(err));
         const reason = err instanceof Error ? err.message : "network error";
         toast.error(`Failed to send template: ${reason}`);
         onUpdateMessage(tempId, { status: "failed" });
@@ -850,7 +852,7 @@ export function MessageThread({
         .eq("id", conversation.id);
 
       if (error) {
-        console.error("Failed to update assignment:", error);
+        console.error("Failed to update assignment:", operationalErrorFields(error));
         toast.error("Failed to update assignment");
         return;
       }

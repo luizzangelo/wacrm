@@ -1,5 +1,7 @@
 "use client";
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -131,7 +133,7 @@ export default function FlowRunsPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          console.error(err);
+          console.error(operationalErrorFields(err));
           toast.error(t("loadError"));
         }
       } finally {

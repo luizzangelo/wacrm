@@ -419,10 +419,10 @@ describe('WhatsApp webhook: unmatched delivery-status observability', () => {
           {
             code: 131026,
             title: 'Message undeliverable',
-            message: 'Authorization=[REDACTED] [REDACTED]',
+            message: '[REDACTED]',
             error_data: {
               details:
-                'Recipient unavailable; [REDACTED] app_secret=[REDACTED]',
+                '[REDACTED]',
             },
           },
         ],
@@ -432,7 +432,7 @@ describe('WhatsApp webhook: unmatched delivery-status observability', () => {
     const serializedLog = JSON.stringify(warnSpy.mock.calls)
     expect(serializedLog).toContain('131026')
     expect(serializedLog).toContain('Message undeliverable')
-    expect(serializedLog).toContain('Recipient unavailable')
+    expect(serializedLog).toContain('[REDACTED]')
     expect(serializedLog).not.toContain(fullRecipient)
     expect(serializedLog).not.toContain(fullMessageId)
     expect(serializedLog).not.toContain('ACTUAL_META_APP_SECRET_VALUE')

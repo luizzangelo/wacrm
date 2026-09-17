@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { decrypt } from '@/lib/whatsapp/encryption';
@@ -343,10 +344,7 @@ export async function processMetaAdEnrichmentBatch(options: {
         account_id: candidate.account_id,
         attribution_id: candidate.id,
         status: 'failed',
-        error_code:
-          error && typeof error === 'object' && 'code' in error
-            ? String(error.code).slice(0, 64)
-            : 'unknown',
+        error_code: operationalErrorFields(error).error_code ?? 'unknown',
       });
     }
   }

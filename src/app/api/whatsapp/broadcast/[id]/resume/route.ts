@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // POST /api/whatsapp/broadcast/[id]/resume   (issue #472)
 //
@@ -102,7 +103,7 @@ export async function POST(
       } catch (err) {
         console.error(
           '[broadcast-resume] delivery threw:',
-          err instanceof Error ? err.message : err
+          operationalErrorFields(err)
         );
         // Don't leave it mid-flight — settle whatever did land.
         await finalizeBroadcastStatus(admin, id).catch(() => {});
@@ -137,7 +138,7 @@ export async function POST(
         { status: error.status }
       );
     }
-    console.error('Error in broadcast resume POST:', error);
+    console.error('Error in broadcast resume POST:', operationalErrorFields(error));
     return toErrorResponse(error);
   }
 }

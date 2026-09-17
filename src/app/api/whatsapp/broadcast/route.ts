@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
@@ -220,7 +221,7 @@ export async function POST(request: Request) {
       } else {
         console.error(
           `Failed to send broadcast to ${recipient.phone}:`,
-          lastError
+          operationalErrorFields(lastError)
         )
         results.push({
           phone: recipient.phone,
@@ -241,7 +242,7 @@ export async function POST(request: Request) {
   } catch (error) {
     // requireRole throws Unauthorized/Forbidden; toErrorResponse maps
     // those to 401/403 and collapses anything else to a generic 500.
-    console.error('Error in WhatsApp broadcast POST:', error)
+    console.error('Error in WhatsApp broadcast POST:', operationalErrorFields(error))
     return toErrorResponse(error)
   }
 }

@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Public-API broadcast core.
 //
@@ -214,7 +215,7 @@ export async function createBroadcast(
     }
   );
   if (createErr || !createdRows || createdRows.length === 0) {
-    console.error('[broadcast-core] create broadcast error:', createErr);
+    console.error('[broadcast-core] create broadcast error:', operationalErrorFields(createErr));
     throw new BroadcastError('internal', 'Failed to create broadcast', 500);
   }
 

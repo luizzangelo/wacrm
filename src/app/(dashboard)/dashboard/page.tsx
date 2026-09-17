@@ -1,5 +1,7 @@
 "use client"
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
@@ -76,17 +78,17 @@ export default function DashboardPage() {
     // sections — each widget shows its own skeleton independently.
     void loadMetrics(db)
       .then((m) => setMetrics(m))
-      .catch((err) => console.error('[dashboard] metrics failed:', err))
+      .catch((err) => console.error('[dashboard] metrics failed:', operationalErrorFields(err)))
       .finally(() => setMetricsLoading(false))
 
     void loadConversationsSeries(db, 30)
       .then((s) => setSeries((prev) => ({ ...prev, 30: s })))
-      .catch((err) => console.error('[dashboard] series failed:', err))
+      .catch((err) => console.error('[dashboard] series failed:', operationalErrorFields(err)))
       .finally(() => setSeriesLoading(false))
 
     void loadPipelineDonut(db)
       .then((p) => setPipeline(p))
-      .catch((err) => console.error('[dashboard] pipeline failed:', err))
+      .catch((err) => console.error('[dashboard] pipeline failed:', operationalErrorFields(err)))
       .finally(() => setPipelineLoading(false))
 
     // Fetch up to 50 so the biggest page-size option in the feed
@@ -94,7 +96,7 @@ export default function DashboardPage() {
     // a pure client-side slice with no extra round trip.
     void loadActivity(db, 50)
       .then((a) => setActivity(a))
-      .catch((err) => console.error('[dashboard] activity failed:', err))
+      .catch((err) => console.error('[dashboard] activity failed:', operationalErrorFields(err)))
       .finally(() => setActivityLoading(false))
   }, [])
 
@@ -141,7 +143,7 @@ export default function DashboardPage() {
       const db = createClient()
       loadConversationsSeries(db, r)
         .then((s) => setSeries((prev) => ({ ...prev, [r]: s })))
-        .catch((err) => console.error('[dashboard] series failed:', err))
+        .catch((err) => console.error('[dashboard] series failed:', operationalErrorFields(err)))
         .finally(() => setSeriesLoading(false))
     },
     [series],

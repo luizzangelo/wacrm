@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET /api/invitations/[token]/peek
 //
@@ -74,7 +75,7 @@ export async function GET(
   });
 
   if (error) {
-    console.error("[peek] rpc error:", error);
+    console.error("[peek] rpc error:", operationalErrorFields(error));
     return NextResponse.json(
       { ok: false, reason: "server_error" },
       { status: 500 },

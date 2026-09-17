@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import {
   getCurrentAccount,
@@ -25,7 +26,7 @@ export async function GET(_request: Request, { params }: Params) {
       .eq('id', id)
       .maybeSingle()
     if (error) {
-      console.error('[ai/knowledge/[id] GET] error:', error)
+      console.error('[ai/knowledge/[id] GET] error:', operationalErrorFields(error))
       return NextResponse.json({ error: 'Failed to load document' }, { status: 500 })
     }
     if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -71,7 +72,7 @@ export async function PATCH(request: Request, { params }: Params) {
       .select('id')
       .maybeSingle()
     if (error) {
-      console.error('[ai/knowledge/[id] PATCH] error:', error)
+      console.error('[ai/knowledge/[id] PATCH] error:', operationalErrorFields(error))
       return NextResponse.json({ error: 'Failed to update document' }, { status: 500 })
     }
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -85,7 +86,7 @@ export async function PATCH(request: Request, { params }: Params) {
         await ingestDocument(supabase, accountId, { embeddingsApiKey }, id, content)
       } catch (err) {
         const message = err instanceof AiError ? err.message : 'indexing failed'
-        console.error('[ai/knowledge/[id] PATCH] ingest error:', err)
+        console.error('[ai/knowledge/[id] PATCH] ingest error:', operationalErrorFields(err))
         return NextResponse.json(
           {
             success: true,
@@ -122,7 +123,7 @@ export async function DELETE(_request: Request, { params }: Params) {
       .eq('account_id', accountId)
       .eq('id', id)
     if (error) {
-      console.error('[ai/knowledge/[id] DELETE] error:', error)
+      console.error('[ai/knowledge/[id] DELETE] error:', operationalErrorFields(error))
       return NextResponse.json({ error: 'Failed to delete document' }, { status: 500 })
     }
     return NextResponse.json({ success: true })

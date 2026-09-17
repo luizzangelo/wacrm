@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
@@ -72,7 +73,7 @@ export async function GET(
       .order('created_at', { ascending: true })
     if (evsErr) {
       // Non-fatal — the page can still show runs without timelines.
-      console.error('[flows-runs] events fetch failed:', evsErr.message)
+      console.error('[flows-runs] events fetch failed:', operationalErrorFields(evsErr))
     } else if (evs) {
       events = evs as typeof events
     }

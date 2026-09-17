@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET /api/v1/broadcasts/{id} — broadcast status + counts
 // (scope: broadcasts:send).
@@ -29,7 +30,7 @@ export async function GET(
       .maybeSingle();
 
     if (error) {
-      console.error('[api/v1/broadcasts] read error:', error);
+      console.error('[api/v1/broadcasts] read error:', operationalErrorFields(error));
       return fail('internal', 'Failed to read broadcast', 500);
     }
     if (!data) return fail('not_found', 'Broadcast not found', 404);

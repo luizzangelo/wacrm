@@ -1,5 +1,7 @@
 'use client';
 
+import { operationalErrorFields } from '@/lib/security/operational-log';
+
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, Plus, Tag as TagIcon, X } from 'lucide-react';
@@ -78,7 +80,7 @@ export function TagManager() {
       if (error) throw error;
       setTags(data || []);
     } catch (err) {
-      console.error('Failed to fetch tags:', err);
+      console.error('Failed to fetch tags:', operationalErrorFields(err));
       toast.error(t('failedToLoadTags'));
     } finally {
       setLoading(false);
@@ -114,7 +116,7 @@ export function TagManager() {
       setSelectedColor(PRESET_COLORS[3].value);
       await fetchTags(user.id);
     } catch (err) {
-      console.error('Create error:', err);
+      console.error('Create error:', operationalErrorFields(err));
       toast.error(t('failedToCreateTag'));
     } finally {
       setSaving(false);
@@ -143,7 +145,7 @@ export function TagManager() {
       setDeleteDialogOpen(false);
       setTagToDelete(null);
     } catch (err) {
-      console.error('Delete error:', err);
+      console.error('Delete error:', operationalErrorFields(err));
       toast.error(t('failedToDeleteTag'));
     } finally {
       setDeleting(false);

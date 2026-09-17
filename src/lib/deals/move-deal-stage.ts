@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LossDetails } from './lifecycle';
 
@@ -111,10 +112,7 @@ export interface DealStageRepository {
 }
 
 function databaseError(operation: string, error: unknown): never {
-  const code =
-    error && typeof error === 'object' && 'code' in error
-      ? String(error.code)
-      : 'unknown';
+  const code = operationalErrorFields(error).error_code ?? 'unknown';
   console.error('[deal-stage] database operation failed', { operation, code });
   throw new DealStageMoveError('database_error', 500);
 }

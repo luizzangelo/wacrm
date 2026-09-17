@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // Public API (v1) response envelope.
 //
@@ -125,7 +126,7 @@ export function toApiErrorResponse(err: unknown): NextResponse {
       { status: err.status, headers: err.headers }
     );
   }
-  console.error('[api/v1] uncategorized error:', err);
+  console.error('[api/v1] uncategorized error:', operationalErrorFields(err));
   return NextResponse.json(
     { error: { code: 'internal', message: 'Internal server error' } },
     { status: 500 }

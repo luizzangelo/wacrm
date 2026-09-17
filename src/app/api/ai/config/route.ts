@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import {
   getCurrentAccount,
@@ -36,7 +37,7 @@ export async function GET() {
       .maybeSingle()
 
     if (error) {
-      console.error('[ai/config GET] fetch error:', error)
+      console.error('[ai/config GET] fetch error:', operationalErrorFields(error))
       return NextResponse.json(
         { error: 'Failed to load AI configuration' },
         { status: 500 },
@@ -175,7 +176,7 @@ export async function POST(request: Request) {
             { status: 400 },
           )
         }
-        console.error('[ai/config POST] validation error:', err)
+        console.error('[ai/config POST] validation error:', operationalErrorFields(err))
         return bad('Could not validate the API key with the provider.')
       }
     }
@@ -192,7 +193,7 @@ export async function POST(request: Request) {
             { status: 400 },
           )
         }
-        console.error('[ai/config POST] embeddings validation error:', err)
+        console.error('[ai/config POST] embeddings validation error:', operationalErrorFields(err))
         return bad('Could not validate the embeddings key.')
       }
     }
@@ -221,7 +222,7 @@ export async function POST(request: Request) {
         .update(encryptedKey ? { ...shared, api_key: encryptedKey } : shared)
         .eq('account_id', accountId)
       if (upErr) {
-        console.error('[ai/config POST] update error:', upErr)
+        console.error('[ai/config POST] update error:', operationalErrorFields(upErr))
         return NextResponse.json(
           { error: 'Failed to save AI configuration' },
           { status: 500 },
@@ -235,7 +236,7 @@ export async function POST(request: Request) {
         ...shared,
       })
       if (insErr) {
-        console.error('[ai/config POST] insert error:', insErr)
+        console.error('[ai/config POST] insert error:', operationalErrorFields(insErr))
         return NextResponse.json(
           { error: 'Failed to save AI configuration' },
           { status: 500 },
@@ -263,7 +264,7 @@ export async function DELETE() {
       .delete()
       .eq('account_id', accountId)
     if (error) {
-      console.error('[ai/config DELETE] error:', error)
+      console.error('[ai/config DELETE] error:', operationalErrorFields(error))
       return NextResponse.json(
         { error: 'Failed to delete AI configuration' },
         { status: 500 },

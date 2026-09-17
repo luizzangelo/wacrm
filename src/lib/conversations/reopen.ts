@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
@@ -37,7 +38,7 @@ export async function reopenClosedConversation(
   if (error) {
     // Best-effort, same as the conversation update this follows: a failed
     // re-open must not abort inbound processing (and make Meta redeliver).
-    console.error('Error re-opening conversation:', error)
+    console.error('Error re-opening conversation:', operationalErrorFields(error))
     return false
   }
 

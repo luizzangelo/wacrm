@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // GET  /api/v1/webhooks — list webhook endpoints (scope: webhooks:manage)
 // POST /api/v1/webhooks — register an endpoint    (scope: webhooks:manage)
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[api/v1/webhooks] list error:', error);
+      console.error('[api/v1/webhooks] list error:', operationalErrorFields(error));
       return fail('internal', 'Failed to list webhooks', 500);
     }
 
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !created) {
-      console.error('[api/v1/webhooks] create error:', error);
+      console.error('[api/v1/webhooks] create error:', operationalErrorFields(error));
       return fail('internal', 'Failed to create webhook', 500);
     }
 

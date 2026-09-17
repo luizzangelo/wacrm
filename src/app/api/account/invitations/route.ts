@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 // /api/account/invitations
 //
@@ -124,7 +125,7 @@ function getBaseUrl(request: Request): string {
   if (allowList && (forwardedHost || host)) {
     console.warn(
       "[POST /api/account/invitations] rejected non-allow-listed host:",
-      { forwardedHost, host, allowList },
+      { forwarded_host_present: Boolean(forwardedHost), host_present: Boolean(host) },
     );
   } else {
     console.warn(
@@ -151,7 +152,7 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("[GET /api/account/invitations] fetch error:", error);
+      console.error("[GET /api/account/invitations] fetch error:", operationalErrorFields(error));
       return NextResponse.json(
         { error: "Failed to load invitations" },
         { status: 500 },
@@ -230,7 +231,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !data) {
-      console.error("[POST /api/account/invitations] insert error:", error);
+      console.error("[POST /api/account/invitations] insert error:", operationalErrorFields(error));
       return NextResponse.json(
         { error: "Failed to create invitation" },
         { status: 500 },

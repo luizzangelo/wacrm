@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import {
   getCurrentAccount,
@@ -23,7 +24,7 @@ export async function GET() {
       .eq('account_id', accountId)
       .order('updated_at', { ascending: false })
     if (error) {
-      console.error('[ai/knowledge GET] error:', error)
+      console.error('[ai/knowledge GET] error:', operationalErrorFields(error))
       return NextResponse.json(
         { error: 'Failed to load knowledge base' },
         { status: 500 },
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
       .select('id')
       .single()
     if (error || !doc) {
-      console.error('[ai/knowledge POST] insert error:', error)
+      console.error('[ai/knowledge POST] insert error:', operationalErrorFields(error))
       return NextResponse.json(
         { error: 'Failed to save document' },
         { status: 500 },
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
       )
     } catch (err) {
       const message = err instanceof AiError ? err.message : 'indexing failed'
-      console.error('[ai/knowledge POST] ingest error:', err)
+      console.error('[ai/knowledge POST] ingest error:', operationalErrorFields(err))
       return NextResponse.json(
         {
           success: true,

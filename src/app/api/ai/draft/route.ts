@@ -1,3 +1,4 @@
+import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
       .eq('id', conversationId)
       .maybeSingle()
     if (convErr) {
-      console.error('[ai/draft] conversation lookup error:', convErr)
+      console.error('[ai/draft] conversation lookup error:', operationalErrorFields(convErr))
       return NextResponse.json({ error: 'Failed to load conversation' }, { status: 500 })
     }
     if (!conversation) {
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
 
     const config = await loadAiConfig(supabase, accountId).catch((err) => {
       // Decrypt failure — surface distinctly from "not configured".
-      console.error('[ai/draft] loadAiConfig error:', err)
+      console.error('[ai/draft] loadAiConfig error:', operationalErrorFields(err))
       throw new AiError('Stored API key could not be decrypted.', {
         code: 'key_decrypt_failed',
         status: 400,
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
         usage,
       })
     } catch (logErr) {
-      console.error('[ai/draft] usage log skipped:', logErr)
+      console.error('[ai/draft] usage log skipped:', operationalErrorFields(logErr))
     }
 
     return NextResponse.json({ draft: text })
