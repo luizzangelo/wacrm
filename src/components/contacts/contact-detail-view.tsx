@@ -61,6 +61,7 @@ export function ContactDetailView({
   onUpdated,
 }: ContactDetailViewProps) {
   const t = useTranslations('Contacts.detailView');
+  const lossT = useTranslations('Pipelines.loss');
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
 
@@ -756,7 +757,7 @@ export function ContactDetailView({
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-medium text-foreground">
-                            {deal.title}
+                            {contact?.name}
                           </p>
                           {deal.stage && (
                             <span
@@ -766,7 +767,7 @@ export function ContactDetailView({
                                 color: deal.stage.color,
                               }}
                             >
-                              {deal.stage.name}
+                              {deal.stage.is_lost_stage ? lossT('stage') : deal.stage.name}
                             </span>
                           )}
                         </div>

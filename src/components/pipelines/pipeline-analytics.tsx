@@ -50,7 +50,7 @@ export function PipelineAnalytics({ stages, deals }: PipelineAnalyticsProps) {
   const t = useTranslations("Pipelines.analytics");
   const { defaultCurrency } = useAuth();
   const sortedStages = useMemo(
-    () => [...stages].sort((a, b) => a.position - b.position),
+    () => stages.filter((stage) => !stage.is_lost_stage).sort((a, b) => a.position - b.position),
     [stages],
   );
 

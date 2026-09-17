@@ -1,5 +1,4 @@
 export interface DealWriteFields {
-  title: string;
   value: number;
   currency: string;
   contact_id: string;
@@ -9,7 +8,6 @@ export interface DealWriteFields {
 }
 
 export interface DealFormValues {
-  title: string;
   value: string;
   currency: string;
   contactId: string;
@@ -21,7 +19,6 @@ export interface DealFormValues {
 
 export function buildDealWriteFields(values: DealFormValues): DealWriteFields {
   return {
-    title: values.title.trim(),
     value: parseFloat(values.value) || 0,
     currency: values.currency,
     contact_id: values.contactId,
@@ -44,7 +41,6 @@ export function buildNewDealInsert(
     user_id: context.userId,
     account_id: context.accountId,
     pipeline_id: context.pipelineId,
-    stage_id: values.stageId,
     status: 'open' as const,
   };
 }

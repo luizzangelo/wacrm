@@ -46,7 +46,11 @@ export function preparePipelineStages(
   stages: PipelineStage[]
 ): EditablePipelineStage[] {
   return [...stages]
-    .sort((a, b) => a.position - b.position)
+    .sort(
+      (a, b) =>
+        Number(Boolean(a.is_lost_stage)) - Number(Boolean(b.is_lost_stage)) ||
+        a.position - b.position
+    )
     .map((stage) => ({
       ...stage,
       meta_conversion_event: stage.meta_conversion_event ?? null,
@@ -71,14 +75,17 @@ export function buildNewPipelineStageInsert(
 export function buildPipelineStageUpsertRows(
   stages: EditablePipelineStage[]
 ): PipelineStageUpsertRow[] {
-  const rows = stages.map((stage, position) => ({
-    id: stage.id,
-    pipeline_id: stage.pipeline_id,
-    name: stage.name,
-    color: stage.color,
-    position,
-    meta_conversion_event: stage.meta_conversion_event,
-  }));
+  // Technical loss is immutable and ordered by the database, not this form.
+  const rows = stages
+    .filter((stage) => !stage.is_lost_stage)
+    .map((stage, position) => ({
+      id: stage.id,
+      pipeline_id: stage.pipeline_id,
+      name: stage.name,
+      color: stage.color,
+      position,
+      meta_conversion_event: stage.meta_conversion_event,
+    }));
 
   // Release mappings first so a valid reassignment is not rejected only
   // because its new owner appears earlier in the visual stage order.

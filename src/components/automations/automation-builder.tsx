@@ -188,7 +188,7 @@ function blankConfig(type: AutomationStepType): Record<string, unknown> {
     case "update_contact_field":
       return { field: "name", value: "" }
     case "create_deal":
-      return { pipeline_id: "", stage_id: "", title: "", value: 0 }
+      return { pipeline_id: "", value: 0 }
     case "wait":
       return { amount: 1, unit: "hours" }
     case "condition":
@@ -452,104 +452,48 @@ function AgentSelect({
   )
 }
 
-/** Pipeline + stage picker for Create Deal. The automation stores ids because
- *  the engine writes directly to deals, but authors should choose by name. */
+/** Creation only chooses a pipeline; initial stage/title are database-owned. */
 function DealPipelineFields({
   pipelineId,
-  stageId,
   onChange,
   t,
 }: {
-  pipelineId: string
-  stageId: string
-  onChange: (patch: { pipeline_id: string; stage_id: string }) => void
-  t: ReturnType<typeof useTranslations>
+  pipelineId: string;
+  onChange: (patch: { pipeline_id: string }) => void;
+  t: ReturnType<typeof useTranslations>;
 }) {
-  const { pipelines, stages } = useResources()
-
-  if (pipelines.length === 0) {
-    return (
-      <>
-        <FieldBlock label={t("pipelines.pipelineIdLabel")}>
-          <Input
-            value={pipelineId}
-            onChange={(e) =>
-              onChange({ pipeline_id: e.target.value, stage_id: stageId })
-            }
-            className="bg-muted text-foreground"
-          />
-        </FieldBlock>
-        <FieldBlock label={t("pipelines.stageIdLabel")}>
-          <Input
-            value={stageId}
-            onChange={(e) =>
-              onChange({ pipeline_id: pipelineId, stage_id: e.target.value })
-            }
-            className="bg-muted text-foreground"
-          />
-        </FieldBlock>
-      </>
-    )
-  }
-
-  const selectedPipeline = pipelines.find((p) => p.id === pipelineId)
-  const stageOptions = stages.filter((s) => s.pipeline_id === pipelineId)
-  const selectedStage = stageOptions.find((s) => s.id === stageId)
-
+  const { pipelines } = useResources();
   return (
-    <>
-      <FieldBlock label={t("pipelines.pipelineLabel")}>
+    <FieldBlock label={t('pipelines.pipelineLabel')}>
+      {pipelines.length === 0 ? (
+        <Input
+          value={pipelineId}
+          onChange={(event) => onChange({ pipeline_id: event.target.value })}
+          className="bg-muted text-foreground"
+        />
+      ) : (
         <select
           value={pipelineId}
-          onChange={(e) => {
-            const nextPipelineId = e.target.value
-            const firstStage = stages.find(
-              (s) => s.pipeline_id === nextPipelineId
-            )
-            onChange({
-              pipeline_id: nextPipelineId,
-              stage_id: firstStage?.id ?? "",
-            })
-          }}
           className={SELECT_CLASS}
+          onChange={(event) => onChange({ pipeline_id: event.target.value })}
         >
-          <option value="">{t("pipelines.selectPipeline")}</option>
-          {pipelines.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
+          <option value="">{t('pipelines.selectPipeline')}</option>
+          {pipelines.map((pipeline) => (
+            <option key={pipeline.id} value={pipeline.id}>
+              {pipeline.name}
             </option>
           ))}
-          {pipelineId && !selectedPipeline && (
-            <option value={pipelineId}>{t("pipelines.unknownPipeline", { id: pipelineId })}</option>
-          )}
+          {pipelineId &&
+            !pipelines.some((pipeline) => pipeline.id === pipelineId) && (
+              <option value={pipelineId}>
+                {t('pipelines.unknownPipeline', { id: pipelineId })}
+              </option>
+            )}
         </select>
-      </FieldBlock>
-      <FieldBlock label={t("pipelines.stageLabel")}>
-        <select
-          value={stageId}
-          onChange={(e) =>
-            onChange({ pipeline_id: pipelineId, stage_id: e.target.value })
-          }
-          className={SELECT_CLASS}
-          disabled={!pipelineId || stageOptions.length === 0}
-        >
-          <option value="">
-            {pipelineId ? t("pipelines.selectStage") : t("pipelines.selectPipelineFirst")}
-          </option>
-          {stageOptions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-          {stageId && pipelineId && !selectedStage && (
-            <option value={stageId}>{t("pipelines.unknownStage", { id: stageId })}</option>
-          )}
-        </select>
-      </FieldBlock>
-    </>
-  )
+      )}
+    </FieldBlock>
+  );
 }
-
 /** Template dropdown showing approved templates by name + language,
  *  storing both template_name and language. Falls back to manual name +
  *  language inputs when no approved templates are synced yet. */
@@ -1395,17 +1339,9 @@ function StepEditor({
         <>
           <DealPipelineFields
             pipelineId={(cfg.pipeline_id as string) ?? ""}
-            stageId={(cfg.stage_id as string) ?? ""}
             onChange={(patch) => set(patch)}
             t={t}
           />
-          <FieldBlock label={t("config.titleLabel")}>
-            <Input
-              value={(cfg.title as string) ?? ""}
-              onChange={(e) => set({ title: e.target.value })}
-              className="bg-muted text-foreground"
-            />
-          </FieldBlock>
           <FieldBlock label={t("config.valueLabel")}>
             <Input
               type="number"

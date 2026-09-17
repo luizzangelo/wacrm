@@ -44,6 +44,14 @@ import {
   moveDealStageIfChanged,
 } from '@/lib/deals/deal-write';
 import { requestDealStageMove } from '@/lib/deals/stage-client';
+import {
+  initialDealStage,
+  sortDealStages,
+  type LossDetails,
+  type LostReason,
+} from '@/lib/deals/lifecycle';
+import { LostReasonDialog } from './lost-reason-dialog';
+import { LostReasonFields } from './lost-reason-fields';
 
 interface DealFormProps {
   open: boolean;
@@ -61,14 +69,16 @@ export function DealForm({
   deal,
   pipelineId,
   stages,
-  defaultStageId,
   onSaved,
 }: DealFormProps) {
   const t = useTranslations('Pipelines.form');
+  const lossT = useTranslations('Pipelines.loss');
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
 
-  const [title, setTitle] = useState('');
+  const [lostReason, setLostReason] = useState<LostReason | ''>('');
+  const [lostReasonNotes, setLostReasonNotes] = useState('');
+  const [lossTarget, setLossTarget] = useState<string | null>(null);
   const [value, setValue] = useState('');
   const [currency, setCurrency] = useState(defaultCurrency);
   const [contactId, setContactId] = useState('');
@@ -95,14 +105,14 @@ export function DealForm({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Reset the form fields every time the sheet opens or its input
-  // props change. This is a legitimate prop-driven sync; the rule is
-  // over-cautious here, hence the block-level disable.
-  /* eslint-disable react-hooks/set-state-in-effect */
+  // props change. This is legitimate prop-driven form synchronization.
   useEffect(() => {
     if (!open) return;
     setConfirmDelete(false);
+    setLossTarget(null);
     if (deal) {
-      setTitle(deal.title);
+      setLostReason(deal.lost_reason ?? '');
+      setLostReasonNotes(deal.lost_reason_notes ?? '');
       setValue(String(deal.value ?? ''));
       setCurrency(deal.currency || defaultCurrency);
       // contact_id is nullable when the contact has been deleted
@@ -113,17 +123,17 @@ export function DealForm({
       setExpectedCloseDate(deal.expected_close_date ?? '');
       setNotes(deal.notes ?? '');
     } else {
-      setTitle('');
+      setLostReason('');
+      setLostReasonNotes('');
       setValue('');
       setCurrency(defaultCurrency);
       setContactId('');
-      setStageId(defaultStageId || stages[0]?.id || '');
+      setStageId(initialDealStage(stages)?.id || '');
       setAssignedTo('');
       setExpectedCloseDate('');
       setNotes('');
     }
-  }, [open, deal, defaultStageId, stages, defaultCurrency]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }, [open, deal, stages, defaultCurrency]);
 
   // Load supporting data once the sheet is open
   useEffect(() => {
@@ -143,12 +153,38 @@ export function DealForm({
     };
   }, [open, supabase]);
 
+  useEffect(() => {
+    if (!open || !accountId) return;
+    const channel = supabase
+      .channel(`deal-form-contact-names:${accountId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'contacts',
+          filter: `account_id=eq.${accountId}`,
+        },
+        async () => {
+          const { data } = await supabase
+            .from('contacts')
+            .select('*')
+            .eq('account_id', accountId)
+            .order('name');
+          setContacts((data ?? []) as Contact[]);
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [accountId, open, supabase]);
+
   // Fetch linked conversation for the selected contact (newest open one).
   // Clearing on no-selection is sync with prop state; the populated
   // case runs setLinkedConversation inside the async fetch callback.
   useEffect(() => {
     if (!open || !contactId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLinkedConversation(null);
       return;
     }
@@ -221,19 +257,25 @@ export function DealForm({
     metaAttributionState.requestKey !== metaAttributionRequestKey
   );
 
-  async function handleSave() {
-    if (!title.trim() || !contactId || !stageId) {
+  async function handleSave(loss?: LossDetails, targetStageId = stageId) {
+    if (!contactId || !targetStageId) {
       toast.error(t('toastRequired'));
+      return;
+    }
+    const target = stages.find((stage) => stage.id === targetStageId);
+    const lossDetails =
+      loss ?? (lostReason ? { lostReason, lostReasonNotes } : undefined);
+    if (target?.is_lost_stage && !lossDetails) {
+      toast.error(lossT('required'));
       return;
     }
     setSaving(true);
 
     const values = {
-      title,
       value,
       currency,
       contactId,
-      stageId,
+      stageId: targetStageId,
       assignedTo,
       notes,
       expectedCloseDate,
@@ -251,9 +293,18 @@ export function DealForm({
       }
 
       try {
-        await moveDealStageIfChanged(deal.stage_id, stageId, () =>
-          requestDealStageMove(deal.id, stageId)
-        );
+        if (target?.is_lost_stage) {
+          await requestDealStageMove(
+            deal.id,
+            targetStageId,
+            undefined,
+            lossDetails
+          );
+        } else {
+          await moveDealStageIfChanged(deal.stage_id, targetStageId, () =>
+            requestDealStageMove(deal.id, targetStageId)
+          );
+        }
       } catch {
         toast.error(t('toastStageMoveFailedAfterSave'));
         setSaving(false);
@@ -284,7 +335,11 @@ export function DealForm({
         })
       );
       if (error) {
-        toast.error(t('toastFailedCreate'));
+        toast.error(
+          error.message.includes('pipeline_has_no_normal_stage')
+            ? lossT('noNormalStage')
+            : t('toastFailedCreate')
+        );
         setSaving(false);
         return;
       }
@@ -298,6 +353,33 @@ export function DealForm({
 
   async function handleStatusChange(status: DealStatus) {
     if (!deal) return;
+    if (status === 'lost') {
+      const lostStage = stages.find((stage) => stage.is_lost_stage);
+      if (lostStage) setLossTarget(lostStage.id);
+      return;
+    }
+    if (
+      status === 'open' &&
+      stages.find((stage) => stage.id === deal.stage_id)?.is_lost_stage
+    ) {
+      const initial = initialDealStage(stages);
+      if (!initial) {
+        toast.error(lossT('noNormalStage'));
+        return;
+      }
+      setStatusAction(status);
+      try {
+        await requestDealStageMove(deal.id, initial.id);
+        toast.success(t('toastReopened'));
+        onOpenChange(false);
+        onSaved();
+      } catch {
+        toast.error(t('toastFailedStatus'));
+      } finally {
+        setStatusAction(null);
+      }
+      return;
+    }
     setStatusAction(status);
     const { error } = await supabase
       .from('deals')
@@ -308,13 +390,7 @@ export function DealForm({
       toast.error(t('toastFailedStatus'));
       return;
     }
-    toast.success(
-      status === 'won'
-        ? t('toastMarkedWon')
-        : status === 'lost'
-          ? t('toastMarkedLost')
-          : t('toastReopened')
-    );
+    toast.success(status === 'won' ? t('toastMarkedWon') : t('toastReopened'));
     onOpenChange(false);
     onSaved();
   }
@@ -335,254 +411,291 @@ export function DealForm({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="bg-popover border-border text-popover-foreground w-full p-0 sm:max-w-lg"
-      >
-        <div className="flex h-full flex-col">
-          <SheetHeader className="border-border/50 border-b p-4">
-            <SheetTitle className="text-popover-foreground">
-              {deal ? t('editDeal') : t('newDeal')}
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t('title')}</Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={t('titlePlaceholder')}
-                className="border-border bg-muted text-foreground"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t('contact')}</Label>
-              <select
-                value={contactId}
-                onChange={(e) => setContactId(e.target.value)}
-                className="border-border bg-muted text-foreground focus:border-primary focus:ring-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none focus:ring-1"
-              >
-                <option value="">{t('selectContact')}</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name || c.phone}
-                  </option>
-                ))}
-              </select>
-
-              {linkedConversation && (
-                <Link
-                  href="/inbox"
-                  className="bg-primary/10 text-primary hover:bg-primary/20 mt-1 inline-flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-xs"
-                >
-                  <MessageSquare className="h-3 w-3" />
-                  {t('linkToConversation')}
-                </Link>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="right"
+          className="bg-popover border-border text-popover-foreground w-full p-0 sm:max-w-lg"
+        >
+          <div className="flex h-full flex-col">
+            <SheetHeader className="border-border/50 border-b p-4">
+              <SheetTitle className="text-popover-foreground">
+                {deal ? t('editDeal') : t('newDeal')}
+              </SheetTitle>
+              {contactId && (
+                <p className="text-muted-foreground text-sm">
+                  {contacts.find((contact) => contact.id === contactId)?.name ||
+                    (deal?.contact_id === contactId ? deal.contact?.name : '')}
+                </p>
               )}
-            </div>
+            </SheetHeader>
 
-            <MetaAdsAttributionCard
-              attribution={currentMetaAttributionSelection.attribution}
-              loading={loadingMetaAttribution}
-              context={currentMetaAttributionSelection.source ?? 'contact'}
-            />
-
-            <div className="grid grid-cols-[1fr_110px] gap-3">
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
               <div className="grid gap-2">
-                <Label className="text-muted-foreground">{t('value')}</Label>
-                <div className="relative">
-                  <DollarSign className="text-muted-foreground absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
-                  <Input
-                    type="number"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder="0"
-                    className="border-border bg-muted text-foreground pl-7"
-                  />
+                <Label className="text-muted-foreground">{t('contact')}</Label>
+                <select
+                  value={contactId}
+                  onChange={(e) => setContactId(e.target.value)}
+                  className="border-border bg-muted text-foreground focus:border-primary focus:ring-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none focus:ring-1"
+                >
+                  <option value="">{t('selectContact')}</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.phone}
+                    </option>
+                  ))}
+                </select>
+
+                {linkedConversation && (
+                  <Link
+                    href="/inbox"
+                    className="bg-primary/10 text-primary hover:bg-primary/20 mt-1 inline-flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-xs"
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                    {t('linkToConversation')}
+                  </Link>
+                )}
+              </div>
+
+              <MetaAdsAttributionCard
+                attribution={currentMetaAttributionSelection.attribution}
+                loading={loadingMetaAttribution}
+                context={currentMetaAttributionSelection.source ?? 'contact'}
+              />
+
+              <div className="grid grid-cols-[1fr_110px] gap-3">
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">{t('value')}</Label>
+                  <div className="relative">
+                    <DollarSign className="text-muted-foreground absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
+                    <Input
+                      type="number"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      placeholder="0"
+                      className="border-border bg-muted text-foreground pl-7"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-muted-foreground">
+                    {t('currency')}
+                  </Label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="border-border bg-muted text-foreground focus:border-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none"
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
+
               <div className="grid gap-2">
-                <Label className="text-muted-foreground">{t('currency')}</Label>
+                <Label className="text-muted-foreground">
+                  {t('expectedCloseDate')}
+                </Label>
+                <Input
+                  type="date"
+                  value={expectedCloseDate}
+                  onChange={(e) => setExpectedCloseDate(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">{t('stage')}</Label>
+                {deal ? (
+                  <select
+                    value={stageId}
+                    onChange={(e) => {
+                      const target = stages.find(
+                        (stage) => stage.id === e.target.value
+                      );
+                      if (target?.is_lost_stage && target.id !== deal.stage_id)
+                        setLossTarget(target.id);
+                      else setStageId(e.target.value);
+                    }}
+                    className="border-border bg-muted text-foreground focus:border-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none"
+                  >
+                    {sortDealStages(stages).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.is_lost_stage ? lossT('stage') : s.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    {initialDealStage(stages)?.name || lossT('noNormalStage')}
+                  </p>
+                )}
+              </div>
+              {deal &&
+                stages.find((stage) => stage.id === stageId)?.is_lost_stage && (
+                  <LostReasonFields
+                    reason={lostReason}
+                    notes={lostReasonNotes}
+                    onReasonChange={setLostReason}
+                    onNotesChange={setLostReasonNotes}
+                  />
+                )}
+
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">
+                  {t('assignedTo')}
+                </Label>
                 <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
+                  value={assignedTo}
+                  onChange={(e) => setAssignedTo(e.target.value)}
                   className="border-border bg-muted text-foreground focus:border-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none"
                 >
-                  {CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code}
+                  <option value="">{t('unassigned')}</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name || p.email}
                     </option>
                   ))}
                 </select>
               </div>
-            </div>
 
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">
-                {t('expectedCloseDate')}
-              </Label>
-              <Input
-                type="date"
-                value={expectedCloseDate}
-                onChange={(e) => setExpectedCloseDate(e.target.value)}
-                className="border-border bg-muted text-foreground"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t('stage')}</Label>
-              <select
-                value={stageId}
-                onChange={(e) => setStageId(e.target.value)}
-                className="border-border bg-muted text-foreground focus:border-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none"
-              >
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t('assignedTo')}</Label>
-              <select
-                value={assignedTo}
-                onChange={(e) => setAssignedTo(e.target.value)}
-                className="border-border bg-muted text-foreground focus:border-primary h-9 w-full rounded-lg border px-2.5 text-sm outline-none"
-              >
-                <option value="">{t('unassigned')}</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name || p.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t('notes')}</Label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t('notesPlaceholder')}
-                className="border-border bg-muted text-foreground min-h-[100px]"
-              />
-            </div>
-
-            {deal && (
-              <div className="border-border bg-muted/50 space-y-2 rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
-                  {t('status')}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => handleStatusChange('won')}
-                    disabled={!!statusAction || deal.status === 'won'}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 flex-1 disabled:opacity-50"
-                  >
-                    {statusAction === 'won' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Check className="mr-1 h-4 w-4" />
-                        {t('markAsWon')}
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => handleStatusChange('lost')}
-                    disabled={!!statusAction || deal.status === 'lost'}
-                    className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {statusAction === 'lost' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <X className="mr-1 h-4 w-4" />
-                        {t('markAsLost')}
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {deal.status && deal.status !== 'open' && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleStatusChange('open')}
-                    disabled={!!statusAction}
-                    className="text-muted-foreground hover:text-foreground w-full"
-                  >
-                    {t('reopenDeal')}
-                  </Button>
-                )}
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">{t('notes')}</Label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={t('notesPlaceholder')}
+                  className="border-border bg-muted text-foreground min-h-[100px]"
+                />
               </div>
-            )}
-          </div>
 
-          <div className="border-border/50 bg-popover/80 border-t p-4">
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                className="border-border text-muted-foreground hover:bg-muted flex-1 bg-transparent"
-              >
-                {t('cancel')}
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={saving || !title.trim() || !contactId || !stageId}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 flex-1"
-              >
-                {saving
-                  ? t('saving')
-                  : deal
-                    ? t('saveChanges')
-                    : t('createDeal')}
-              </Button>
+              {deal && (
+                <div className="border-border bg-muted/50 space-y-2 rounded-lg border p-3">
+                  <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                    {t('status')}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => handleStatusChange('won')}
+                      disabled={
+                        !!statusAction ||
+                        deal.status === 'won' ||
+                        deal.status === 'lost'
+                      }
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 flex-1 disabled:opacity-50"
+                    >
+                      {statusAction === 'won' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="mr-1 h-4 w-4" />
+                          {t('markAsWon')}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => handleStatusChange('lost')}
+                      disabled={!!statusAction || deal.status === 'lost'}
+                      className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {statusAction === 'lost' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <X className="mr-1 h-4 w-4" />
+                          {t('markAsLost')}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {deal.status && deal.status !== 'open' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => handleStatusChange('open')}
+                      disabled={!!statusAction}
+                      className="text-muted-foreground hover:text-foreground w-full"
+                    >
+                      {t('reopenDeal')}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {deal &&
-              (confirmDelete ? (
-                <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs">
-                  <span className="text-red-300">{t('deletePrompt')}</span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(false)}
-                      disabled={deleting}
-                      className="text-muted-foreground hover:bg-muted rounded px-2 py-1"
-                    >
-                      {t('cancel')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      disabled={deleting}
-                      className="rounded bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {deleting ? t('deleting') : t('confirm')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                  className="mt-3 flex w-full items-center justify-center gap-1 text-xs text-red-400 hover:text-red-300"
+            <div className="border-border/50 bg-popover/80 border-t p-4">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  className="border-border text-muted-foreground hover:bg-muted flex-1 bg-transparent"
                 >
-                  <Trash2 className="h-3 w-3" />
-                  {t('deleteDeal')}
-                </button>
-              ))}
+                  {t('cancel')}
+                </Button>
+                <Button
+                  onClick={() => handleSave()}
+                  disabled={saving || !contactId || !stageId}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 flex-1"
+                >
+                  {saving
+                    ? t('saving')
+                    : deal
+                      ? t('saveChanges')
+                      : t('createDeal')}
+                </Button>
+              </div>
+
+              {deal &&
+                (confirmDelete ? (
+                  <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs">
+                    <span className="text-red-300">{t('deletePrompt')}</span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(false)}
+                        disabled={deleting}
+                        className="text-muted-foreground hover:bg-muted rounded px-2 py-1"
+                      >
+                        {t('cancel')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="rounded bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deleting ? t('deleting') : t('confirm')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    className="mt-3 flex w-full items-center justify-center gap-1 text-xs text-red-400 hover:text-red-300"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    {t('deleteDeal')}
+                  </button>
+                ))}
+            </div>
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </SheetContent>
+      </Sheet>
+      {open && lossTarget && (
+        <LostReasonDialog
+          onCancel={() => setLossTarget(null)}
+          onConfirm={async (loss) => {
+            await handleSave(loss, lossTarget);
+            setLossTarget(null);
+          }}
+        />
+      )}
+    </>
   );
 }

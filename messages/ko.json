@@ -552,6 +552,29 @@
     }
   },
   "Pipelines": {
+    "loss": {
+      "stage": "판매 실패",
+      "reason": "실패 사유",
+      "selectReason": "사유 선택",
+      "notes": "메모 (선택)",
+      "confirm": "실패 확정",
+      "cancel": "취소",
+      "saving": "저장 중...",
+      "required": "실패 사유를 선택해 주세요.",
+      "noNormalStage": "이 파이프라인에는 거래 생성 또는 재개를 위한 일반 단계가 없습니다.",
+      "unmappedHelp": "실패 전용 단계: Meta 전환을 전송하지 않습니다.",
+      "reasons": {
+        "price": "가격",
+        "no_interest": "관심 없음",
+        "no_budget": "예산 부족",
+        "no_response": "응답 없음",
+        "competitor": "경쟁사에서 구매",
+        "unavailable": "제품/서비스 이용 불가",
+        "bad_timing": "시기가 맞지 않음",
+        "unqualified": "자격 미달",
+        "other": "기타"
+      }
+    },
     "page": {
       "selectPipeline": "파이프라인 선택",
       "noPipelinesYet": "아직 파이프라인이 없습니다",
@@ -610,7 +633,7 @@
       "confirm": "확인",
       "deleting": "삭제 중...",
       "deleteDeal": "딜 삭제",
-      "toastRequired": "제목, 연락처, 단계는 필수입니다",
+      "toastRequired": "연락처와 초기 단계가 있는 파이프라인을 선택하세요.",
       "toastFailedSave": "딜을 저장하지 못했습니다",
       "toastStageMoveFailedAfterSave": "세부 정보는 저장되었지만 단계를 변경하지 못했습니다. 딜이 파이프라인과 동기화되었습니다.",
       "toastNotSignedIn": "로그인되어 있지 않습니다",

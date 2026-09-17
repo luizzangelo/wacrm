@@ -552,6 +552,29 @@
     }
   },
   "Pipelines": {
+    "loss": {
+      "stage": "Venda perdida",
+      "reason": "Motivo da perda",
+      "selectReason": "Selecione um motivo",
+      "notes": "Observação (opcional)",
+      "confirm": "Confirmar perda",
+      "cancel": "Cancelar",
+      "saving": "Salvando...",
+      "required": "Informe o motivo da perda.",
+      "noNormalStage": "O funil não possui uma etapa normal para criar ou reabrir o negócio.",
+      "unmappedHelp": "Etapa técnica de perda: não envia conversões para a Meta.",
+      "reasons": {
+        "price": "Preço",
+        "no_interest": "Sem interesse",
+        "no_budget": "Sem orçamento",
+        "no_response": "Sem resposta",
+        "competitor": "Comprou de concorrente",
+        "unavailable": "Produto/serviço indisponível",
+        "bad_timing": "Momento inadequado",
+        "unqualified": "Não qualificado",
+        "other": "Outro"
+      }
+    },
     "page": {
       "selectPipeline": "Selecionar funil",
       "noPipelinesYet": "Ainda não há funis",
@@ -610,7 +633,7 @@
       "confirm": "Confirmar",
       "deleting": "Excluindo...",
       "deleteDeal": "Excluir negócio",
-      "toastRequired": "Título, contato e etapa são obrigatórios",
+      "toastRequired": "Selecione um contato e um funil com etapa inicial.",
       "toastFailedSave": "Falha ao salvar negócio",
       "toastStageMoveFailedAfterSave": "Os dados foram salvos, mas não foi possível alterar a etapa. O negócio foi sincronizado com o funil.",
       "toastNotSignedIn": "Você não está conectado",

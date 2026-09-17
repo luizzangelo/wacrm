@@ -7,6 +7,7 @@ import {
   moveDealToStage,
 } from '@/lib/deals/move-deal-stage';
 import { metaConversionsAdmin } from '@/lib/meta-conversions/admin-client';
+import { isLostReason } from '@/lib/deals/lifecycle';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,9 +35,28 @@ export async function PATCH(
 
     const body = (await request.json().catch(() => null)) as {
       stageId?: unknown;
+      lostReason?: unknown;
+      lostReasonNotes?: unknown;
     } | null;
     if (typeof body?.stageId !== 'string' || !UUID_RE.test(body.stageId)) {
       return NextResponse.json({ error: 'invalid_stage_id' }, { status: 400 });
+    }
+    if (body.lostReason !== undefined && !isLostReason(body.lostReason)) {
+      return NextResponse.json(
+        { error: 'invalid_lost_reason' },
+        { status: 400 }
+      );
+    }
+    if (
+      body.lostReasonNotes !== undefined &&
+      body.lostReasonNotes !== null &&
+      (typeof body.lostReasonNotes !== 'string' ||
+        body.lostReasonNotes.length > 4000)
+    ) {
+      return NextResponse.json(
+        { error: 'invalid_loss_notes' },
+        { status: 400 }
+      );
     }
 
     const result = await moveDealToStage(
@@ -46,6 +66,12 @@ export async function PATCH(
         actorUserId: userId,
         dealId,
         newStageId: body.stageId,
+        ...(isLostReason(body.lostReason)
+          ? { lostReason: body.lostReason }
+          : {}),
+        ...(body.lostReasonNotes !== undefined
+          ? { lostReasonNotes: body.lostReasonNotes as string | null }
+          : {}),
       }
     );
     return NextResponse.json(result);

@@ -118,6 +118,11 @@ export function PipelineSettings({
     const oldIndex = localStages.findIndex((s) => s.id === active.id);
     const newIndex = localStages.findIndex((s) => s.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
+    if (
+      localStages[oldIndex].is_lost_stage ||
+      localStages[newIndex].is_lost_stage
+    )
+      return;
     setLocalStages(arrayMove(localStages, oldIndex, newIndex));
   }
 
@@ -176,7 +181,7 @@ export function PipelineSettings({
           pipeline.id,
           trimmed,
           newStageColor,
-          localStages.length
+          localStages.filter((stage) => !stage.is_lost_stage).length
         )
       )
       .select()
@@ -185,10 +190,12 @@ export function PipelineSettings({
       toast.error(t('toastFailedAddStage'));
       return;
     }
-    setLocalStages([
-      ...localStages,
-      { ...(data as PipelineStage), meta_conversion_event: null },
-    ]);
+    setLocalStages(
+      preparePipelineStages([
+        ...localStages,
+        { ...(data as PipelineStage), meta_conversion_event: null },
+      ])
+    );
     setNewStageName('');
     setNewStageColor(
       STAGE_COLORS[(localStages.length + 1) % STAGE_COLORS.length]
@@ -436,7 +443,9 @@ function SortableStageRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: stage.id });
+  } = useSortable({ id: stage.id, disabled: stage.is_lost_stage });
+
+  const lossT = useTranslations('Pipelines.loss');
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -457,6 +466,7 @@ function SortableStageRow({
           {...listeners}
           className="text-muted-foreground hover:text-foreground cursor-grab touch-none active:cursor-grabbing"
           aria-label={t('dragToReorder')}
+          disabled={stage.is_lost_stage}
         >
           <GripVertical className="h-4 w-4" />
         </button>
@@ -467,7 +477,8 @@ function SortableStageRow({
           t={t}
         />
         <Input
-          value={stage.name}
+          value={stage.is_lost_stage ? lossT('stage') : stage.name}
+          disabled={stage.is_lost_stage}
           onChange={(e) => onNameChange(e.target.value)}
           className="text-foreground focus:border-border h-7 flex-1 border-transparent bg-transparent text-sm"
         />
@@ -475,6 +486,7 @@ function SortableStageRow({
           variant="ghost"
           size="icon-xs"
           onClick={onRemove}
+          disabled={stage.is_lost_stage}
           className="text-muted-foreground hover:text-red-400"
         >
           <Trash2 className="h-3 w-3" />
@@ -489,6 +501,7 @@ function SortableStageRow({
           {t('metaConversionLabel')}
         </Label>
         <Select
+          disabled={stage.is_lost_stage}
           value={metaConversionEventToSelectValue(stage.meta_conversion_event)}
           onValueChange={(value) =>
             onMetaConversionEventChange(
@@ -511,7 +524,9 @@ function SortableStageRow({
           </SelectContent>
         </Select>
         <p className="text-muted-foreground text-xs">
-          {t('metaConversionHelp')}
+          {stage.is_lost_stage
+            ? lossT('unmappedHelp')
+            : t('metaConversionHelp')}
         </p>
       </div>
     </div>

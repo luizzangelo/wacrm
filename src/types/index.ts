@@ -449,6 +449,7 @@ export interface PipelineStage {
   name: string;
   position: number;
   color: string;
+  is_lost_stage?: boolean;
   meta_conversion_event?: MetaConversionEvent | null;
   created_at: string;
 }
@@ -471,6 +472,8 @@ export interface Deal {
   value: number;
   currency?: string;
   meta_attribution_id?: string | null;
+  lost_reason?: import('@/lib/deals/lifecycle').LostReason | null;
+  lost_reason_notes?: string | null;
   notes?: string;
   expected_close_date?: string;
   status?: DealStatus;
@@ -655,8 +658,9 @@ export interface UpdateContactFieldStepConfig {
 
 export interface CreateDealStepConfig {
   pipeline_id: string;
-  stage_id: string;
-  title: string;
+  /** Legacy configuration fields, ignored by the database-owned creation flow. */
+  stage_id?: string;
+  title?: string;
   value?: number;
 }
 

@@ -70,6 +70,43 @@ beforeEach(() => {
 });
 
 describe('PATCH /api/deals/[dealId]/stage', () => {
+  it('forwards validated reason and notes through the same central service', async () => {
+    mocks.requireRole.mockResolvedValue(context('agent'));
+    const response = await patch({
+      stageId: STAGE_ID,
+      lostReason: 'other',
+      lostReasonNotes: 'Optional',
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.moveDealToStage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        lostReason: 'other',
+        lostReasonNotes: 'Optional',
+        accountId: 'account-a',
+        newStageId: STAGE_ID,
+      })
+    );
+  });
+  it.each([
+    { lostReason: 'invalid' },
+    { lostReason: null },
+    { lostReasonNotes: 42 },
+    { lostReasonNotes: 'x'.repeat(4001) },
+  ])('rejects malformed loss details before any write', async (details) => {
+    mocks.requireRole.mockResolvedValue(context('agent'));
+    expect((await patch({ stageId: STAGE_ID, ...details })).status).toBe(400);
+    expect(mocks.moveDealToStage).not.toHaveBeenCalled();
+  });
+  it('returns clear validation error for lost stage without reason', async () => {
+    mocks.requireRole.mockResolvedValue(context('agent'));
+    mocks.moveDealToStage.mockRejectedValue(
+      new DealStageMoveError('lost_reason_required', 400)
+    );
+    const response = await patch({ stageId: STAGE_ID });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'lost_reason_required' });
+  });
   it('rejects a viewer through the agent role gate', async () => {
     mocks.requireRole.mockRejectedValue(new Error('insufficient role'));
 

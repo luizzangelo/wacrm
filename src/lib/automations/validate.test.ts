@@ -115,9 +115,12 @@ describe("validateStepsForActivation", () => {
     ]);
     expect(issues.map((i) => i.path).sort()).toEqual([
       "steps[0].pipeline_id",
-      "steps[0].stage_id",
-      "steps[0].title",
     ]);
+  });
+  it("accepts database-owned stage and title for create_deal", () => {
+    expect(validateStepsForActivation([
+      { step_type: "create_deal", step_config: {pipeline_id:"pipeline",value:0} },
+    ])).toEqual([]);
   });
 
   it("validates send_buttons / send_list interactive payloads", () => {

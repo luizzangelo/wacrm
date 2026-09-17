@@ -1,4 +1,5 @@
 import type { Deal } from '@/types';
+import type { LossDetails } from './lifecycle';
 import type { MoveDealToStageResult } from './move-deal-stage';
 
 export class DealStageRequestError extends Error {
@@ -38,14 +39,15 @@ function isMoveResult(value: unknown): value is MoveDealToStageResult {
 export async function requestDealStageMove(
   dealId: string,
   newStageId: string,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  loss?: LossDetails
 ): Promise<MoveDealToStageResult> {
   const response = await fetcher(
     `/api/deals/${encodeURIComponent(dealId)}/stage`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stageId: newStageId }),
+      body: JSON.stringify({ stageId: newStageId, ...loss }),
     }
   );
   const body = (await response.json().catch(() => null)) as unknown;

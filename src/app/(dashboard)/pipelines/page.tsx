@@ -33,7 +33,9 @@ import { useTranslations } from 'next-intl';
 import {
   applyOptimisticDealStage,
   requestDealStageMoveWithRefresh,
+  requestDealStageMove,
 } from '@/lib/deals/stage-client';
+import { initialDealStage, type LossDetails } from '@/lib/deals/lifecycle';
 
 // Pipeline creation is admin-class (settings-tier write under
 // the new RLS); deal creation is operational and only requires
@@ -225,27 +227,62 @@ export default function PipelinesPage() {
     setDeals(await loadDeals(selectedPipelineId));
   }, [loadDeals, selectedPipelineId]);
 
+  // Joined contact names must stay live even when edits happen in another tab.
+  useEffect(() => {
+    if (!accountId) return;
+    const channel = supabase
+      .channel(`deal-contact-names:${accountId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'contacts',
+          filter: `account_id=eq.${accountId}`,
+        },
+        () => {
+          void refreshDeals();
+        }
+      )
+      .subscribe();
+    function refreshOnFocus() {
+      void refreshDeals();
+    }
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      void supabase.removeChannel(channel);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [accountId, supabase, refreshDeals]);
+
   const handleDealMoved = useCallback(
-    async (dealId: string, newStageId: string) => {
+    async (dealId: string, newStageId: string, loss?: LossDetails) => {
       // Optimistic update — board already animated; just persist.
       setDeals((prev) => applyOptimisticDealStage(prev, dealId, newStageId));
       try {
-        await requestDealStageMoveWithRefresh(dealId, newStageId, refreshDeals);
+        if (loss) {
+          await requestDealStageMove(dealId, newStageId, undefined, loss);
+        } else {
+          await requestDealStageMoveWithRefresh(
+            dealId,
+            newStageId,
+            refreshDeals
+          );
+        }
+        await refreshDeals(); // also refresh status/reopening and reason
       } catch {
+        await refreshDeals();
         toast.error(t('toastFailedMoveDeal'));
       }
     },
     [refreshDeals, t]
   );
 
-  const handleAddDeal = useCallback(
-    (stageId?: string) => {
-      setEditingDeal(null);
-      setDefaultStageId(stageId ?? stages[0]?.id ?? '');
-      setDealFormOpen(true);
-    },
-    [stages]
-  );
+  const handleAddDeal = useCallback(() => {
+    setEditingDeal(null);
+    setDefaultStageId(initialDealStage(stages)?.id ?? '');
+    setDealFormOpen(true);
+  }, [stages]);
 
   const handleEditDeal = useCallback((deal: Deal) => {
     setEditingDeal(deal);

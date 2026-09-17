@@ -552,6 +552,29 @@
     }
   },
   "Pipelines": {
+    "loss": {
+      "stage": "Lost sale",
+      "reason": "Loss reason",
+      "selectReason": "Select a reason",
+      "notes": "Note (optional)",
+      "confirm": "Confirm loss",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "required": "A loss reason is required.",
+      "noNormalStage": "This pipeline has no normal stage for creating or reopening a deal.",
+      "unmappedHelp": "Technical loss stage: does not send Meta conversions.",
+      "reasons": {
+        "price": "Price",
+        "no_interest": "No interest",
+        "no_budget": "No budget",
+        "no_response": "No response",
+        "competitor": "Bought from a competitor",
+        "unavailable": "Product/service unavailable",
+        "bad_timing": "Bad timing",
+        "unqualified": "Unqualified",
+        "other": "Other"
+      }
+    },
     "page": {
       "selectPipeline": "Select Pipeline",
       "noPipelinesYet": "No pipelines yet",
@@ -610,7 +633,7 @@
       "confirm": "Confirm",
       "deleting": "Deleting...",
       "deleteDeal": "Delete Deal",
-      "toastRequired": "Title, contact, and stage are required",
+      "toastRequired": "Select a contact and a pipeline with an initial stage.",
       "toastFailedSave": "Failed to save deal",
       "toastStageMoveFailedAfterSave": "The details were saved, but the stage could not be changed. The deal was synchronized with the pipeline.",
       "toastNotSignedIn": "Not signed in",

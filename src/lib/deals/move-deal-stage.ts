@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { LossDetails } from './lifecycle';
 
 import type {
   DealStatus,
@@ -21,6 +22,8 @@ export interface DealStageSnapshot {
   expected_close_date: string | null;
   status: DealStatus;
   meta_attribution_id: string | null;
+  lost_reason?: LossDetails['lostReason'] | null;
+  lost_reason_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +32,7 @@ export interface DealStageTarget {
   id: string;
   pipeline_id: string;
   meta_conversion_event: MetaConversionEvent | null;
+  is_lost_stage?: boolean;
 }
 
 interface ConversionIntentOutcome {
@@ -61,12 +65,14 @@ export type DealStageMoveErrorCode =
   | 'stage_not_available'
   | 'invalid_current_stage'
   | 'stage_conflict'
+  | 'lost_reason_required'
+  | 'invalid_loss_notes'
   | 'database_error';
 
 export class DealStageMoveError extends Error {
   constructor(
     readonly code: DealStageMoveErrorCode,
-    readonly status: 404 | 409 | 500,
+    readonly status: 400 | 404 | 409 | 500,
     readonly currentStageId?: string
   ) {
     super(code);
@@ -79,6 +85,8 @@ export interface MoveDealToStageInput {
   actorUserId: string;
   dealId: string;
   newStageId: string;
+  lostReason?: LossDetails['lostReason'];
+  lostReasonNotes?: string | null;
 }
 
 type DealStageRpcResult =
@@ -90,6 +98,8 @@ type DealStageRpcResult =
         | 'stage_not_available'
         | 'invalid_current_stage'
         | 'stage_conflict'
+        | 'lost_reason_required'
+        | 'invalid_loss_notes'
         | 'invalid_identifier';
       currentStageId?: string;
     };
@@ -143,6 +153,12 @@ export function createDealStageRepository(
           p_account_id: input.accountId,
           p_deal_id: input.dealId,
           p_new_stage_id: input.newStageId,
+          ...(input.lostReason !== undefined
+            ? { p_lost_reason: input.lostReason }
+            : {}),
+          ...(input.lostReasonNotes !== undefined
+            ? { p_lost_reason_notes: input.lostReasonNotes }
+            : {}),
         }
       );
 
@@ -172,10 +188,13 @@ export async function moveDealToStage(
     }
 
     const status =
-      result.error === 'deal_not_found' ||
-      result.error === 'stage_not_available'
-        ? 404
-        : 409;
+      result.error === 'lost_reason_required' ||
+      result.error === 'invalid_loss_notes'
+        ? 400
+        : result.error === 'deal_not_found' ||
+            result.error === 'stage_not_available'
+          ? 404
+          : 409;
 
     if (result.error === 'stage_conflict') {
       console.warn('[deal-stage] concurrent stage transition rejected', {

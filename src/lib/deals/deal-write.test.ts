@@ -9,7 +9,6 @@ import {
 } from './deal-write';
 
 const values: DealFormValues = {
-  title: '  Updated deal  ',
   value: '1250.50',
   currency: 'BRL',
   contactId: 'contact-a',
@@ -24,7 +23,6 @@ describe('deal form writes', () => {
     const update = buildDealWriteFields(values);
 
     expect(update).toEqual({
-      title: 'Updated deal',
       value: 1250.5,
       currency: 'BRL',
       contact_id: 'contact-a',
@@ -71,7 +69,7 @@ describe('deal form writes', () => {
     expect(moveCalls).toBe(1);
   });
 
-  it('keeps the initial stage in a new deal insert', () => {
+  it('leaves initial stage and title to the central database trigger', () => {
     const insert = buildNewDealInsert(values, {
       userId: 'user-a',
       accountId: 'account-a',
@@ -82,8 +80,9 @@ describe('deal form writes', () => {
       user_id: 'user-a',
       account_id: 'account-a',
       pipeline_id: 'pipeline-a',
-      stage_id: 'stage-b',
       status: 'open',
     });
+    expect(insert).not.toHaveProperty('stage_id');
+    expect(insert).not.toHaveProperty('title');
   });
 });

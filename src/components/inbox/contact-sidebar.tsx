@@ -28,6 +28,7 @@ interface ContactSidebarProps {
 export function ContactSidebar({ contact }: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
+  const lossT = useTranslations("Pipelines.loss");
 
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
@@ -226,7 +227,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                     className="rounded-lg bg-muted px-3 py-2"
                   >
                     <p className="text-sm font-medium text-foreground">
-                      {deal.title}
+                      {contact.name}
                     </p>
                     <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
                       <span>
@@ -241,7 +242,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                             color: deal.stage.color,
                           }}
                         >
-                          {deal.stage.name}
+                          {deal.stage.is_lost_stage ? lossT("stage") : deal.stage.name}
                         </span>
                       )}
                     </div>
