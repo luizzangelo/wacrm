@@ -110,3 +110,32 @@ The first Docker build caught a Node 20 incompatibility in the newly selected
 jsdom and an npm lockfile-version mismatch. jsdom is pinned to 26.1.0 (Node >=18),
 and the lockfile is regenerated/verified with Docker's npm 10.8.2. No runtime
 Node image or CAPI implementation is changed to solve a test dependency issue.
+
+## Verified staging result — 2026-09-17
+
+Code/image commit `17240d2` was pushed and built successfully as
+`wacrm-staging:17240d2`. The new migration was applied only to Supabase project
+`awganmhowivedfocwzjy`. Only the staging app image was updated; the scheduler
+remains on `wacrm-staging:65c593f`, with the same task/config and 120000ms
+interval. Both services are 1/1; the app container is healthy. Login returns
+HTTP 200 and an unauthenticated stage mutation returns HTTP 401.
+
+The exact `supabase/tests/20a_staging_structural_check.sql` passed on staging:
+initial stage/title enforcement, automatic technical loss creation, mandatory
+reason rejection, atomic confirmation, same-stage reason edit, reopening,
+cross-pipeline rejection, no-normal-stage rejection and attribution preservation.
+Every fixture was rolled back. DOM cancellation paths were verified locally,
+not by using a browser on staging.
+
+After deployment and rollback checks: one existing pipeline (`Comercial`), one
+existing deal, two attributions and seven conversion events remain. All seven
+complete historical event rows compare byte-equivalent to the pre-migration
+snapshot: six sent, one failed, zero pending, zero sending. No conversion event
+was created and no CAPI send log occurred during this change. Automatic scheduler
+runs at 04:39:43 and 04:41:43 UTC returned HTTP 200 with processed=0. No manual
+cron, Graph API call or real mapped-stage transition was executed.
+
+The previous remote stack manifest is recoverably backed up at
+`/opt/wacrm-staging/stack.yml.before-20a-20260917`. The unrelated remote auth
+changes remain untouched. The two clean temporary detached build worktrees were
+removed after verification; their commits and the successful Docker image remain.
