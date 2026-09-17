@@ -63,3 +63,59 @@ Database tests run only in isolated PGlite/PostgreSQL. Real staging deals are no
 moved for validation. Read-only aggregate calls and before/after Meta event/config
 snapshots verify deployment without cron or CAPI calls. Existing advisor findings
 must not be confused with new migration regressions.
+
+### Deployment evidence — 2026-09-17
+
+- Implementation commit/image: `50f56c5` / `wacrm-staging:50f56c5`.
+- Migration applied successfully to staging. Both RPCs are invoker functions with
+  an empty search path; security-advisor finding counts are unchanged.
+- 75 new tests; full suite: 115 files / 1,386 tests passing. Scheduler: 12/12.
+  Typecheck, local Next build, Docker build and diff checks pass. Lint has zero
+  errors and 36 pre-existing warnings.
+- Disposable real PostgreSQL 16 concurrency tests pass: simultaneous loss moves
+  create one occurrence, reopening and losing again creates another, and no
+  conversion intents are generated. The disposable container is removed by the
+  test script; no staging deal is moved for these checks.
+- Authenticated staging UI: both cards load, loss filters Day/Week/Month work,
+  Portuguese labels and Sunday-first weekdays render, and both light/dark themes
+  are legible. The original light theme is restored. At 400 px, the response card
+  wraps its summaries and limits horizontal scrolling to the chart. Loss-chart
+  responsive structure and wrapping are additionally covered by DOM tests.
+- Current response summary is 17h 13min (three successful-response samples);
+  previous week has no samples and displays a dash. Axis uses explicit duration
+  ticks, not repeated decimal-minute zero labels.
+- App is 1/1 and healthy. Scheduler remains 1/1 on its original task/image
+  `65c593f`, interval 120 seconds; automatic executions return HTTP 200 and process
+  zero events. No manual cron is called.
+- All eight historical Meta conversion event rows are byte-for-byte unchanged;
+  config and attribution fingerprints are unchanged. Attributions: two; pending:
+  zero; sending: zero; loss occurrences: zero. No real CAPI POST is made by this
+  task. No production or Meta configuration is changed.
+- The remote original checkout's pre-existing password-recovery changes are
+  preserved. Docker is built from a separate clean, disposable worktree.
+
+### Changed files
+
+```text
+deploy/staging/README.md
+deploy/staging/stack.yml
+docs/dashboard-loss-and-response.md
+messages/en.json
+messages/ko.json
+messages/pt-BR.json
+src/app/(dashboard)/dashboard/page.tsx
+src/components/dashboard/dashboard-bar-chart.tsx
+src/components/dashboard/dashboard-charts.test.tsx
+src/components/dashboard/loss-reasons-chart.tsx
+src/components/dashboard/response-time-chart.tsx
+src/hooks/use-dashboard-loss-reasons.ts
+src/lib/dashboard/chart-format.test.ts
+src/lib/dashboard/chart-format.ts
+src/lib/dashboard/dashboard-database.test.ts
+src/lib/dashboard/queries.test.ts
+src/lib/dashboard/queries.ts
+src/lib/dashboard/types.ts
+src/lib/deals/inbound-database.test.ts
+supabase/migrations/20260917054725_dashboard_loss_history_and_response_metrics.sql
+supabase/tests/inbound_concurrency.sh
+```
