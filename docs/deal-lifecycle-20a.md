@@ -101,7 +101,12 @@ edge static generation) and existing lint warnings are documented, not fixed
 with unrelated changes. npm reports preexisting dependency advisories; no
 out-of-scope automatic upgrade/audit fix is applied.
 
-Local verification: 98 added tests, full Vitest suite 108 files / 1235 tests PASS;
+Local verification: 99 added tests, full Vitest suite 108 files / 1236 tests PASS;
 separate scheduler 12/12 PASS; typecheck/build PASS; lint 0 errors / the existing
 37 warnings. The CAPI sender, transport, customer hashing, scheduler and
 historical migrations have zero diff.
+
+The first Docker build caught a Node 20 incompatibility in the newly selected
+jsdom and an npm lockfile-version mismatch. jsdom is pinned to 26.1.0 (Node >=18),
+and the lockfile is regenerated/verified with Docker's npm 10.8.2. No runtime
+Node image or CAPI implementation is changed to solve a test dependency issue.

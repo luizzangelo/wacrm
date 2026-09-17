@@ -143,6 +143,16 @@ afterAll(async () => {
 });
 
 describe('actual PostgreSQL deal lifecycle migration and central RPC', () => {
+  it('executes the exact staging structural check and rolls back every fixture', async () => {
+    await db.exec("UPDATE meta_conversion_config SET dataset_id='2000316380612611'");
+    const before = (await db.query('SELECT * FROM pipelines ORDER BY id')).rows;
+    const result = await db.exec(readFileSync(resolve('supabase/tests/20a_staging_structural_check.sql'),'utf8'));
+    expect(result.at(-1)?.rows[0]).toMatchObject({result:{
+      all_fixtures_rolled_back:true,new_conversion_events:0,historical_events_unchanged:true,
+      first_normal_enforced:true,loss_confirm_atomic:true,reopening:true,
+    }});
+    expect((await db.query('SELECT * FROM pipelines ORDER BY id')).rows).toEqual(before);
+  });
   it('backfills exactly one technical loss stage in every existing pipeline', async () => {
     const result = await db.query<{ count: number }>(
       'SELECT count(*) FROM pipeline_stages WHERE is_lost_stage GROUP BY pipeline_id'
