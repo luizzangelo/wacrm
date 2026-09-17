@@ -117,3 +117,18 @@ migration. No inbound, auto-deal, movement, CAPI or scheduler logic is changed.
 Sixteen added tests cover sender/status behavior, removal after response, bubble
 border, date/hour/minute and midnight/day rollover. Full suite 1311 PASS; lint
 0 errors/36 preexisting warnings, build PASS; no runtime dependency change.
+
+Deployed only staging as `wacrm-staging:9fcb98e`, Docker image digest
+`sha256:9b285baa24cef344e6ea44e0cca8da65b511b2a6555fb3bc8a81617ca2bee76a`.
+Typecheck/diff checks and 12 scheduler tests also passed. Isolated Postgres
+concurrency checks passed again with the new migration. Migration applied to
+`awganmhowivedfocwzjy`; runtime summary RPC HTTP 200, two rows containing sender
+field. Local and external login HTTP 200; an initial transient external 404
+right after service convergence resolved on the next read-only check, without
+configuration changes. App and scheduler healthy 1/1; scheduler unchanged.
+
+The eight event rows present before this follow-up (six sent, one failed, one
+skipped_no_attribution) remain byte-equivalent after deployment. Zero new CAPI
+send log entries since 05:35 UTC; no manual cron/messages/Meta calls. Security
+advisor counts unchanged; RPC remains invoker with anon execution denied.
+Remote manifest backup: `/opt/wacrm-staging/stack.yml.before-card-20260917`.

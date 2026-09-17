@@ -65,7 +65,8 @@ verify HTTP 200, processed/sent/failed=0, unchanged rows and no sender POST log.
 
 Copy `stack.yml` and `meta-conversions-scheduler.mjs` to `/opt/wacrm-staging/`.
 Back up its previous stack file first. Preserve the dirty application checkout.
-The app image is `wacrm-staging:4392448`, including automatic inbound deals,
+The app image is `wacrm-staging:9fcb98e`, including card reply dots/date-time,
+automatic inbound deals,
 batched Kanban conversation context, the 20A deal lifecycle,
 the 19C CAPI redirect-replay
 fix and 19D read-only event diagnostics (see
