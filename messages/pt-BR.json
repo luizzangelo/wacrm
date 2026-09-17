@@ -602,6 +602,10 @@
     },
     "card": {
       "noContact": "Sem contato",
+      "noMessages": "Sem mensagens",
+      "attachment": "Mensagem com anexo",
+      "leadRegistration": "Data de inscrição do lead",
+      "noRegistrationDate": "Sem data",
       "won": "Ganho",
       "lost": "Perdido"
     },

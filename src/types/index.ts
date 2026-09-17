@@ -456,6 +456,14 @@ export interface PipelineStage {
 
 export type DealStatus = 'open' | 'won' | 'lost';
 
+export interface DealConversationSummary {
+  deal_id: string;
+  conversation_id: string | null;
+  last_message_text: string | null;
+  last_message_type: string | null;
+  first_inbound_at: string | null;
+}
+
 export interface Deal {
   id: string;
   user_id: string;
@@ -482,6 +490,7 @@ export interface Deal {
   contact?: Contact;
   stage?: PipelineStage;
   assignee?: Profile;
+  conversation_summary?: DealConversationSummary;
 }
 
 export type BroadcastStatus =

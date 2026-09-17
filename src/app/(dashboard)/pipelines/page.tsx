@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { attachDealConversationSummaries } from '@/lib/deals/card-context';
+import type { DealConversationSummary } from '@/types';
 import type { Pipeline, PipelineStage, Deal } from '@/types';
 import { PipelineBoard } from '@/components/pipelines/pipeline-board';
 import { PipelineSettings } from '@/components/pipelines/pipeline-settings';
@@ -83,7 +85,8 @@ export default function PipelinesPage() {
     const { data, error } = await supabase
       .from('pipelines')
       .select('*')
-      .order('created_at');
+      .order('created_at')
+      .order('id');
     if (error) {
       console.error('Failed to load pipelines:', error.message);
       return [];
@@ -112,7 +115,19 @@ export default function PipelinesPage() {
         )
         .eq('pipeline_id', pipelineId)
         .order('created_at', { ascending: false });
-      return (data ?? []) as Deal[];
+      const { data: summaries, error: summaryError } = await supabase.rpc(
+        'get_deal_conversation_summaries',
+        { p_pipeline_id: pipelineId }
+      );
+      if (summaryError)
+        console.error(
+          'Failed to load deal message summaries:',
+          summaryError.code
+        );
+      return attachDealConversationSummaries(
+        (data ?? []) as Deal[],
+        summaryError ? [] : ((summaries ?? []) as DealConversationSummary[])
+      );
     },
     [supabase]
   );
@@ -190,7 +205,6 @@ export default function PipelinesPage() {
     if (!selectedPipelineId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStages([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDeals([]);
       return;
     }
@@ -238,6 +252,30 @@ export default function PipelinesPage() {
           event: '*',
           schema: 'public',
           table: 'contacts',
+          filter: `account_id=eq.${accountId}`,
+        },
+        () => {
+          void refreshDeals();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'deals',
+          filter: `account_id=eq.${accountId}`,
+        },
+        () => {
+          void refreshDeals();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
           filter: `account_id=eq.${accountId}`,
         },
         () => {

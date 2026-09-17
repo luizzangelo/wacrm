@@ -602,6 +602,10 @@
     },
     "card": {
       "noContact": "No contact",
+      "noMessages": "No messages",
+      "attachment": "Attachment message",
+      "leadRegistration": "Lead registration date",
+      "noRegistrationDate": "No date",
       "won": "Won",
       "lost": "Lost"
     },
