@@ -106,6 +106,10 @@ Vault/colunas dependentes; o fluxo gerenciado de clone copia essa chave.
 
 ## Auth, Storage e configuração fora do dump
 
+Antes de produção: validar disponibilidade e habilitar proteção de senhas vazadas
+do Auth, ou aprovar controle equivalente; o advisor atual registra-a desativada.
+Nenhuma configuração Auth foi alterada em 21B.
+
 - Auth: users e hashes de senhas, identities e objetos relacionados. Preservar
   UUIDs; não disparar signup trigger durante importação. Configurar SMTP,
   providers, redirect URLs/domínio e políticas externas separadamente. Outro

@@ -21,6 +21,12 @@ Estas quatro migrations estão APLICADAS por equivalência de SQL. Não executar
 novamente, não renomear os arquivos históricos e não fazer `migration repair`
 apenas para deixar timestamps visualmente iguais.
 
+A única migration nova desta etapa foi confirmada por comparação integral do SQL
+após apply: Git `20260917161334` → staging `20260917163719`,
+`security_hardening_privileged_rpcs`; SHA-256 normalizado
+`37b50edd73573132c55ba35791f98353034af7beafeddf7db0c5c5fa4081438e`.
+O timestamp foi atribuído pelo MCP; não reparar nem reaplicar essa migration.
+
 ## Procedimento reproduzível
 
 1. Confirmar project ref, ambiente, HEAD e branch. Obter ledger por SELECT

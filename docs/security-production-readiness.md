@@ -148,7 +148,52 @@ regeneráveis. Nenhuma imagem de rollback, volume ou outro serviço foi removido
 IDs: wk30eyh17x2sz4j41b3gg0gka, 9ls2aibomd1qjdwzh1nrshelp,
 z6s57bjfa24r5umlicgl0mvqw. Espaço livre passou de 1.2 para 4.9 GB antes do build.
 
-## Próxima etapa, não executada
+Também removido somente o cache npm-ci Node 20 gerado nesta própria etapa
+(`hqtqrge0kkd0ekhjmkrvlibgp`, 932.9 MB), para o rebuild Node 24. Regenerável;
+imagens anteriores e serviços preservados.
+
+## Evidência de aceite staging — 2026-09-17
+
+- Código da imagem: `d638ff57112e96c8c8609bf724caeef5651585a8`;
+  tag `wacrm-staging:d638ff5`, image ID
+  `sha256:b84a8a79b8a12a38c83ae54db91c2a583105a1b7af90302e62ea5168c03750cc`.
+  HEAD final de documentação/manifesto é posterior; não altera código da imagem.
+- Migration aplicada só em awganmhowivedfocwzjy, versão registrada
+  `20260917163719`, SQL completo igual ao arquivo Git. Nenhuma equivalência antiga
+  reaplicada; nenhuma edição de histórico de migrations.
+- pg_proc: seis internals invoker sem EXECUTE browser/PUBLIC; service_role sim.
+  Definers anon = 2, authenticated = 7, exatamente as exceções justificadas acima.
+  PUBLIC não executa nenhum definer; 24 funções revisadas têm search_path fixo.
+  Advisors de search_path zerados; demais avisos intencionais/Auth detalhados abaixo.
+- npm test: 117 arquivos, 1407 testes PASS. SQL/RPC: 14 testes PGlite isolados
+  com corpos reais e rollback. Scheduler: 15 PASS local e na nova imagem sem rede;
+  reconciliação: 3 PASS. Typecheck padrão PASS também em worktree sem .next/next-env;
+  build limpo PASS, diff --check PASS, lint 0 erros/40 warnings, npm audit 0 vulnerabilidades.
+- Deploy iniciado `2026-09-17T16:41:36Z`, só nos dois serviços existentes staging.
+  App/scheduler 1/1 healthy, runtime Node 24.21.0, restart_count 0. Manifesto,
+  Spec.Image e com.docker.stack.image iguais nos dois serviços. Config imutável
+  `meta_conversions_scheduler_21b_v1`; configuração/imagens anteriores preservadas.
+- Ciclos automáticos observados às 16:41:50.998Z e 16:43:51.004Z: HTTP 200,
+  intervalo efetivo 120.006s, processed/sent/failed/delivery_unknown/errors = 0.
+  Sem restart loop, cron manual ou POST /events.
+- HTTP read-only: login 200; inbox/pipelines/dashboard/settings 307 para login;
+  account/WhatsApp config/Meta config/event diagnostics 401 sem sessão. Não houve
+  login real/validação visual autenticada, envio WhatsApp ou tráfego CAPI de teste;
+  inbound/outbound/AI/broadcast/RPCs legítimas cobertos pelos testes isolados/mocks.
+- Comparação integral das oito linhas Meta antes/depois: iguais; novos eventos 0,
+  pending/sending 0. Configuração e duas attributions também iguais. Nenhum cron
+  manual, Graph API, movimento de deal ou POST /events executado nesta etapa.
+- Varredura passiva dos logs dos novos tasks desde o deploy, comparando PII/clid
+  e secrets atuais em memória sem imprimi-los: zero matches de phone/email/name,
+  clid, tokens/secrets, Authorization ou SHA256 completo; zero logs de envio Meta.
+- Limpeza adicional, somente caches privados regeneráveis destes builds:
+  `6cra55zdzkvwpq0pyz1dp7opd` (919.7 MB), `1m4mgxw6gmio4sonz4d188lzx`
+  (298 MB), `4jask04f215jqimem5edwl4ql` (297.9 MB),
+  `4ndwaskq33a4bu8xikmvbcngi` (290.9 MB). Nenhuma imagem/volume/serviço removido.
+  Espaço livre final observado 2.8 GB (93% usado); não armazenar backup volumoso
+  na raiz da VPS. Provisionar capacidade/armazenamento off-site antes do backup.
+
+## Pendências antes de produção
 
 Advisors adicionais: automation_pending_executions tem RLS sem policy porque é
 fila interna service-only (nega browser); vector em public permanece por
