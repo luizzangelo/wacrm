@@ -71,3 +71,34 @@ PASS and git diff --check PASS. The first prebuild typecheck found duplicate
 generated `.next/types/* 2.ts` files; Next build regenerated its type directory,
 and the subsequent standalone typecheck passed. No source was removed or
 runtime dependency changed.
+
+## Staging evidence — 2026-09-17
+
+Code/image `4392448` built successfully (Docker digest
+`sha256:c3403ccc1f1da90342aed00919a146361adefa4ddb558f73f149b04042b3120c`).
+The concurrency script passed on an isolated networkless Postgres 16 container:
+overlapping inbound inserts produced one deal; manual/inbound overlap did not
+duplicate the manual deal; conversion count remained zero. The temporary
+container and clean detached build worktree were removed, not the dirty remote
+auth checkout or any persistent data.
+
+The migration was applied only to project `awganmhowivedfocwzjy`. Staging app
+and scheduler are 1/1 and healthy. The app is `wacrm-staging:4392448`; scheduler
+image `65c593f`, config and task `nowi61qx7igu` are unchanged at 120000ms.
+Login HTTP 200. The new summary RPC via runtime PostgREST returned HTTP 200 /
+two rows; an anonymous request returned HTTP 401. New functions are invoker/
+empty-search-path with expected grants. Security advisor findings are unchanged,
+with no new function flagged. The existing Realtime publication contains deals.
+
+Read-only comparison after migration/deploy: all seven complete historical event
+rows match the baseline, six sent and one failed, no pending/sending events.
+Attributions and Meta configuration digests match their baselines without
+printing any values. Existing deal count remains two; no backfill occurred.
+No manual cron, WhatsApp send, Graph API call or real POST /events was executed.
+App logs since 05:13 UTC contain zero CAPI send entries.
+
+Original manifest backup:
+`/opt/wacrm-staging/stack.yml.before-inbound-20260917`.
+Automatic scheduler executions at 05:23:44 and 05:25:44 UTC both returned
+HTTP 200, processed=0. The final read-only comparison after both executions
+again confirmed identical historical events, attributions and Meta configuration.
