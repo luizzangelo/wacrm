@@ -20,6 +20,18 @@ export function leadRegistrationDate(value?: string | null): string | null {
   return date.toLocaleDateString('pt-BR', { timeZone: 'America/Fortaleza' });
 }
 
+export function leadRegistrationDateTime(value?: string | null): string | null {
+  const day = leadRegistrationDate(value);
+  if (!day || !value) return null;
+  const time = new Date(value).toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Fortaleza',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${day} ${time}`;
+}
+
 export function lastMessagePreview(
   summary: DealConversationSummary | undefined,
   noMessages: string,

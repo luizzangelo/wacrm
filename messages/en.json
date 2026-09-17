@@ -603,6 +603,7 @@
     "card": {
       "noContact": "No contact",
       "noMessages": "No messages",
+      "needsReply": "Awaiting reply",
       "attachment": "Attachment message",
       "leadRegistration": "Lead registration date",
       "noRegistrationDate": "No date",

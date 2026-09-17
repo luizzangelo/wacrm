@@ -44,7 +44,7 @@ describe('Kanban card: latest message and lead registration', () => {
   });
   it('shows first inbound date in pt-BR at top right, not deal creation date', () => {
     card({ ...deal, created_at: '2026-08-01T10:00:00Z' });
-    const date = screen.getByText('17/09/2026');
+    const date = screen.getByText('17/09/2026 07:30');
     expect(date.tagName).toBe('TIME');
     expect(date.getAttribute('datetime')).toBe(
       deal.conversation_summary!.first_inbound_at
@@ -124,10 +124,75 @@ describe('Kanban card: latest message and lead registration', () => {
   });
   it('registration remains rightmost even when a status badge is shown', () => {
     card({ ...deal, status: 'won' });
-    const date = screen.getByText('17/09/2026');
+    const date = screen.getByText('17/09/2026 07:30');
     expect(date.parentElement?.parentElement?.lastElementChild).toBe(
       date.parentElement
     );
     expect(screen.getByText('Ganho')).toBeTruthy();
+  });
+  it('latest customer message shows inbox-style purple reply indicator', () => {
+    card({
+      ...deal,
+      conversation_summary: {
+        ...deal.conversation_summary!,
+        last_message_sender_type: 'customer',
+      },
+    });
+    const dot = screen.getByRole('img', { name: 'Aguardando resposta' });
+    expect(dot.className).toContain('bg-primary');
+    expect(dot.className).toContain('h-2 w-2');
+    expect(dot.className).toContain('rounded-full');
+  });
+  it.each(['agent', 'bot', null, undefined] as const)(
+    'latest %s sender does not show reply indicator',
+    (sender) => {
+      card({
+        ...deal,
+        conversation_summary: {
+          ...deal.conversation_summary!,
+          last_message_sender_type: sender,
+        },
+      });
+      expect(
+        screen.queryByRole('img', { name: 'Aguardando resposta' })
+      ).toBeNull();
+    }
+  );
+  it('message is enclosed in a rounded bordered bubble', () => {
+    card();
+    const preview = screen.getByText('Latest conversation message');
+    expect(preview.classList.contains('border')).toBe(true);
+    expect(preview.classList.contains('rounded-2xl')).toBe(true);
+  });
+  it('indicator disappears when card refresh gets an outbound reply', () => {
+    const leadDeal = {
+      ...deal,
+      conversation_summary: {
+        ...deal.conversation_summary!,
+        last_message_sender_type: 'customer' as const,
+      },
+    };
+    const view = render(
+      <DealCard deal={leadDeal} stage={null} onEdit={() => {}} />
+    );
+    expect(
+      screen.getByRole('img', { name: 'Aguardando resposta' })
+    ).toBeTruthy();
+    view.rerender(
+      <DealCard
+        deal={{
+          ...leadDeal,
+          conversation_summary: {
+            ...leadDeal.conversation_summary,
+            last_message_sender_type: 'agent',
+          },
+        }}
+        stage={null}
+        onEdit={() => {}}
+      />
+    );
+    expect(
+      screen.queryByRole('img', { name: 'Aguardando resposta' })
+    ).toBeNull();
   });
 });

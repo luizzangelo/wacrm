@@ -19,7 +19,8 @@ for task_sql in src/lib/deals/lifecycle-schema.fixture.sql src/lib/deals/inbound
   supabase/migrations/040_meta_conversions_foundation.sql \
   supabase/migrations/041_meta_conversion_stage_outbox.sql \
   supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql \
-  supabase/migrations/20260917051426_inbound_deal_and_card_context.sql; do
+  supabase/migrations/20260917051426_inbound_deal_and_card_context.sql \
+  supabase/migrations/20260917053602_deal_card_reply_indicator.sql; do
   docker exec -i "$task_container" psql -U postgres -v ON_ERROR_STOP=1 -q < "$task_sql" >/dev/null
 done
 

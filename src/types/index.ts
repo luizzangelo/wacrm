@@ -461,6 +461,7 @@ export interface DealConversationSummary {
   conversation_id: string | null;
   last_message_text: string | null;
   last_message_type: string | null;
+  last_message_sender_type?: 'customer' | 'agent' | 'bot' | null;
   first_inbound_at: string | null;
 }
 

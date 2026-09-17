@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl';
 import { dealContactName } from '@/lib/deals/lifecycle';
 import {
   lastMessagePreview,
-  leadRegistrationDate,
+  leadRegistrationDateTime,
 } from '@/lib/deals/card-context';
 
 interface DealCardProps {
@@ -26,7 +26,7 @@ function initials(name?: string, fallback?: string) {
 export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
   const t = useTranslations('Pipelines.card');
   const assigneeLabel = deal.assignee?.full_name || null;
-  const registrationDate = leadRegistrationDate(
+  const registrationDate = leadRegistrationDateTime(
     deal.conversation_summary?.first_inbound_at
   );
 
@@ -54,7 +54,7 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
       />
 
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-foreground flex-1 text-sm leading-snug font-semibold break-words">
+        <h4 className="text-foreground min-w-0 flex-1 text-sm leading-snug font-semibold break-words">
           {dealContactName(deal, t('noContact'))}
         </h4>
         {deal.status === 'won' && (
@@ -87,13 +87,23 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
         </span>
       </div>
 
-      <p className="text-muted-foreground mt-2 truncate text-xs">
-        {lastMessagePreview(
-          deal.conversation_summary,
-          t('noMessages'),
-          t('attachment')
+      <div className="mt-2 flex items-center gap-2">
+        <p className="text-muted-foreground border-primary/20 bg-primary/5 min-w-0 flex-1 truncate rounded-2xl rounded-tl-sm border px-3 py-2 text-xs">
+          {lastMessagePreview(
+            deal.conversation_summary,
+            t('noMessages'),
+            t('attachment')
+          )}
+        </p>
+        {deal.conversation_summary?.last_message_sender_type === 'customer' && (
+          <span
+            role="img"
+            aria-label={t('needsReply')}
+            title={t('needsReply')}
+            className="bg-primary h-2 w-2 shrink-0 rounded-full"
+          />
         )}
-      </p>
+      </div>
 
       <div className="mt-2 flex items-center justify-between">
         <span className="text-primary text-sm font-bold">

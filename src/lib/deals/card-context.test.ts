@@ -4,8 +4,28 @@ import {
   attachDealConversationSummaries,
   lastMessagePreview,
   leadRegistrationDate,
+  leadRegistrationDateTime,
 } from './card-context';
 describe('card context helpers', () => {
+  it('registration date includes local hour and minute alongside the date', () => {
+    expect(leadRegistrationDateTime('2026-09-17T10:30:00Z')).toBe(
+      '17/09/2026 07:30'
+    );
+  });
+  it('registration datetime handles midnight and UTC day rollover', () => {
+    expect(leadRegistrationDateTime('2026-09-17T03:00:00Z')).toBe(
+      '17/09/2026 00:00'
+    );
+    expect(leadRegistrationDateTime('2026-09-17T01:02:00Z')).toBe(
+      '16/09/2026 22:02'
+    );
+  });
+  it.each([null, undefined, '', 'invalid'])(
+    'invalid datetime %s is safe',
+    (value) => {
+      expect(leadRegistrationDateTime(value)).toBeNull();
+    }
+  );
   it('joins batched summaries by deal id without changing original deals', () => {
     const deals = [{ id: 'one' }, { id: 'two' }] as Deal[];
     const summary = {

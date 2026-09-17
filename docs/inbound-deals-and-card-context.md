@@ -102,3 +102,18 @@ Original manifest backup:
 Automatic scheduler executions at 05:23:44 and 05:25:44 UTC both returned
 HTTP 200, processed=0. The final read-only comparison after both executions
 again confirmed identical historical events, attributions and Meta configuration.
+
+## Card reply indicator and registration time
+
+Cards now show registration date plus HH:mm in America/Fortaleza, not the last
+message time. A rounded bordered preview bubble and an 8px `bg-primary` dot use
+the inbox theme. The dot means latest stored conversation message sender is
+`customer`, independently of read/unread or delivery status. It disappears when
+the latest sender is agent/bot; missing summaries/senders show no dot. Accessible
+tooltip/label is translated in pt-BR/en/ko. The batch invoker RPC adds only
+`last_message_sender_type`, with unchanged RLS and grants, in a new transactional
+migration. No inbound, auto-deal, movement, CAPI or scheduler logic is changed.
+
+Sixteen added tests cover sender/status behavior, removal after response, bubble
+border, date/hour/minute and midnight/day rollover. Full suite 1311 PASS; lint
+0 errors/36 preexisting warnings, build PASS; no runtime dependency change.

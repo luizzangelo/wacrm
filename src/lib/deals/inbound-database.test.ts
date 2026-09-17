@@ -90,6 +90,7 @@ beforeAll(async () => {
     'supabase/migrations/041_meta_conversion_stage_outbox.sql',
     'supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql',
     'supabase/migrations/20260917051426_inbound_deal_and_card_context.sql',
+    'supabase/migrations/20260917053602_deal_card_reply_indicator.sql',
   ])
     await db.exec(readFileSync(path, 'utf8'));
   await db.exec(`UPDATE pipeline_stages SET meta_conversion_event='LeadSubmitted' WHERE id='${LEAD}';
@@ -362,6 +363,7 @@ describe('actual inbound migration: automatic deal and read-only card summaries'
       'conversation_id',
       'deal_id',
       'first_inbound_at',
+      'last_message_sender_type',
       'last_message_text',
       'last_message_type',
     ]);
@@ -373,6 +375,30 @@ describe('actual inbound migration: automatic deal and read-only card summaries'
     await inbound();
     expect(await deals()).toHaveLength(0);
   });
+  it('summary identifies latest customer sender even after status changes', async () => {
+    await inbound();
+    await db.exec("UPDATE messages SET status='read'");
+    expect((await summaries())[0].last_message_sender_type).toBe('customer');
+  });
+  it.each(['agent', 'bot'])(
+    'outbound %s becomes latest sender without changing registration',
+    async (sender) => {
+      await inbound();
+      await inbound(
+        'wamid.reply',
+        sender,
+        'text',
+        'Reply',
+        CONV,
+        '2026-09-18T10:00:00Z'
+      );
+      expect((await summaries())[0]).toMatchObject({
+        last_message_sender_type: sender,
+        first_inbound_at: new Date('2026-09-17T10:00:00Z'),
+      });
+      expect(await events()).toHaveLength(0);
+    }
+  );
   it('trigger helpers are not public callable RPCs', async () => {
     for (const fn of [
       'lock_deal_contact_context()',

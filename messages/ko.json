@@ -603,6 +603,7 @@
     "card": {
       "noContact": "연락처 없음",
       "noMessages": "메시지 없음",
+      "needsReply": "답장 대기 중",
       "attachment": "첨부 메시지",
       "leadRegistration": "리드 등록일",
       "noRegistrationDate": "날짜 없음",
