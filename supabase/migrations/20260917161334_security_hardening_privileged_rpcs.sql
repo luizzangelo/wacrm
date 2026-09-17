@@ -47,6 +47,13 @@ ALTER FUNCTION public.record_webhook_failure(uuid,integer) SECURITY INVOKER;
 ALTER FUNCTION public.recompute_broadcast_counts(uuid) SECURITY INVOKER;
 ALTER FUNCTION public._bcast_bump(uuid,text,integer) SECURITY INVOKER;
 
+-- Non-elevating, pure/trigger helpers flagged by the security advisor.
+-- Preserve their invoker behavior while removing caller-controlled resolution.
+ALTER FUNCTION public._bcast_cols_for_status(text) SET search_path TO pg_catalog, public, pg_temp;
+ALTER FUNCTION public.update_updated_at_column() SET search_path TO pg_catalog, public, pg_temp;
+ALTER FUNCTION public.update_ai_configs_updated_at() SET search_path TO pg_catalog, public, pg_temp;
+ALTER FUNCTION public.update_ai_knowledge_documents_updated_at() SET search_path TO pg_catalog, public, pg_temp;
+
 -- Preserve authenticated, explicitly auth.uid()/account-scoped user RPCs.
 GRANT EXECUTE ON FUNCTION public.set_member_role(uuid,public.account_role_enum) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.remove_account_member(uuid) TO authenticated;

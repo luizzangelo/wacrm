@@ -44,6 +44,9 @@ passam a imprimir SQLSTATE, não SQLERRM, mantendo o comportamento de fallback.
 Os quatro RPCs que já eram service-only também receberam search_path seguro:
 increment_flow_execution_count, increment_automation_execution_count,
 bump_conversation_on_inbound, create_broadcast_with_recipients.
+Também fixado search_path dos quatro helpers invoker apontados pelo advisor:
+_bcast_cols_for_status, update_updated_at_column, update_ai_configs_updated_at,
+update_ai_knowledge_documents_updated_at; sem modificar seus corpos/grants.
 
 ## Definers públicos que permanecem: justificativas
 
@@ -142,6 +145,17 @@ IDs: wk30eyh17x2sz4j41b3gg0gka, 9ls2aibomd1qjdwzh1nrshelp,
 z6s57bjfa24r5umlicgl0mvqw. Espaço livre passou de 1.2 para 4.9 GB antes do build.
 
 ## Próxima etapa, não executada
+
+Advisors adicionais: automation_pending_executions tem RLS sem policy porque é
+fila interna service-only (nega browser); vector em public permanece por
+compatibilidade dos tipos/AI e public não aceita CREATE dos browser roles.
+Esses avisos não representam uma RPC privilegiada insegura. Proteção de senhas
+vazadas do Auth está desativada: verificar disponibilidade/plano e habilitar
+manualmente antes de produção, ou documentar controle equivalente. Auth não foi
+alterado nesta etapa. Referências de remediação:
+[fila RLS](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy),
+[extensão](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public),
+[password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
 
 Revisar [reconciliação](migration-reconciliation.md), escolher explicitamente
 A/B em [topologia e backup](production-topology-and-backup.md), autorizar backup

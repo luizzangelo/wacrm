@@ -23,6 +23,8 @@ const names = new Set([
   'peek_invitation', 'redeem_invitation', 'merge_duplicate_contacts', 'touch_presence',
   'notify_conversation_assigned', 'record_webhook_failure', 'merge_duplicate_conversations',
   'bump_conversation_on_inbound', 'create_broadcast_with_recipients',
+  'update_updated_at_column', 'update_ai_configs_updated_at',
+  'update_ai_knowledge_documents_updated_at',
 ]);
 let db: PGlite;
 async function caller(role: 'anon' | 'authenticated' | 'service_role', uid = '') {
@@ -76,6 +78,14 @@ afterEach(async () => { await db.exec('RESET ROLE; ROLLBACK'); });
 afterAll(async () => { await db?.close(); });
 
 describe('privileged RPC hardening in isolated PostgreSQL', () => {
+  it('all reviewed functions have a fixed search path, including invoker trigger helpers', async () => {
+    const functions = (await db.query<{proname:string,proconfig:string[]}>(
+      "SELECT proname,proconfig FROM pg_proc WHERE pronamespace='public'::regnamespace"
+    )).rows.filter(row => names.has(row.proname));
+    expect(functions).toHaveLength(names.size);
+    for (const fn of functions)
+      expect(fn.proconfig).toContain('search_path=pg_catalog, public, pg_temp');
+  });
   it('user mutations lock authorization rows and recheck target account at write time', async () => {
     for(const name of ['set_member_role','remove_account_member','transfer_account_ownership','touch_presence','redeem_invitation']) {
       const definition=(await db.query<{definition:string}>(
