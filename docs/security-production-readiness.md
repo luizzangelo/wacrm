@@ -120,6 +120,10 @@ via lockfile. Não houve upgrade major React/Supabase ou mudança de APIs/negóc
 [sharp](https://github.com/lovell/sharp/security/advisories/GHSA-rgj7-g3m4-5g8c).
 Lint tem warnings legados e quatro novos avisos da regra de navegação Next,
 nenhum erro; deprecações middleware/Edge não são falha de build.
+Docker foi atualizado de Node 20 EOL para Node 24.21.0 LTS (a mesma versão dos
+testes locais); os três estágios usam a versão fixa. App e scheduler devem usar
+a mesma nova imagem, sem secrets no build.
+[Calendário oficial Node](https://nodejs.org/en/about/previous-releases).
 
 ## Scheduler e deploy: critérios
 
