@@ -20,7 +20,8 @@ for task_sql in src/lib/deals/lifecycle-schema.fixture.sql src/lib/deals/inbound
   supabase/migrations/041_meta_conversion_stage_outbox.sql \
   supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql \
   supabase/migrations/20260917051426_inbound_deal_and_card_context.sql \
-  supabase/migrations/20260917053602_deal_card_reply_indicator.sql; do
+  supabase/migrations/20260917053602_deal_card_reply_indicator.sql \
+  supabase/migrations/20260917054725_dashboard_loss_history_and_response_metrics.sql; do
   docker exec -i "$task_container" psql -U postgres -v ON_ERROR_STOP=1 -q < "$task_sql" >/dev/null
 done
 
@@ -75,3 +76,40 @@ task_count=$(docker exec "$task_container" psql -U postgres -Atq -c 'SELECT coun
 task_events=$(docker exec "$task_container" psql -U postgres -Atq -c 'SELECT count(*) FROM meta_conversion_events')
 [ "$task_events" = '0' ] || { echo 'Inbound created a conversion' >&2; exit 1; }
 echo 'PASS: concurrent inbound and manual/inbound race; conversion events=0'
+
+# Same loss transition submitted concurrently: only the winning UPDATE is an
+# occurrence. Uses disposable fixtures and an unmapped loss stage, never Meta.
+task_loss_sql="SELECT public.move_deal_to_stage_with_conversion_intent(
+  d.account_id,d.id,s.id,'price') FROM public.deals d
+  JOIN public.pipeline_stages s ON s.pipeline_id=d.pipeline_id AND s.is_lost_stage
+  WHERE d.account_id='00000000-0000-4000-8000-000000000001';"
+docker exec "$task_container" psql -U postgres -v ON_ERROR_STOP=1 -q -c "
+BEGIN; SET LOCAL ROLE service_role;
+$task_loss_sql
+SELECT pg_advisory_xact_lock(712340003); SELECT pg_sleep(2); COMMIT;" >/dev/null &
+task_first=$!
+task_ready=0
+while [ "$(docker exec "$task_container" psql -U postgres -Atq -c "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND objid=712340003 AND granted")" != '1' ]; do
+  task_ready=$((task_ready + 1))
+  if [ "$task_ready" -gt 30 ]; then echo 'Loss lock marker not reached' >&2; exit 1; fi
+  sleep 0.1
+done
+docker exec "$task_container" psql -U postgres -v ON_ERROR_STOP=1 -q -c "
+BEGIN; SET LOCAL ROLE service_role; $task_loss_sql COMMIT;" >/dev/null &
+task_second=$!
+wait "$task_first"
+wait "$task_second"
+task_count=$(docker exec "$task_container" psql -U postgres -Atq -c 'SELECT count(*) FROM deal_loss_events')
+[ "$task_count" = '1' ] || { echo 'Concurrent loss duplicated history' >&2; exit 1; }
+docker exec "$task_container" psql -U postgres -v ON_ERROR_STOP=1 -q -c "
+BEGIN; SET LOCAL ROLE service_role;
+SELECT public.move_deal_to_stage_with_conversion_intent(d.account_id,d.id,s.id)
+FROM public.deals d JOIN public.pipeline_stages s ON s.pipeline_id=d.pipeline_id
+AND NOT s.is_lost_stage AND s.position=0
+WHERE d.account_id='00000000-0000-4000-8000-000000000001';
+$task_loss_sql COMMIT;" >/dev/null
+task_count=$(docker exec "$task_container" psql -U postgres -Atq -c 'SELECT count(*) FROM deal_loss_events')
+[ "$task_count" = '2' ] || { echo 'Reopen/loss did not preserve two occurrences' >&2; exit 1; }
+task_events=$(docker exec "$task_container" psql -U postgres -Atq -c 'SELECT count(*) FROM meta_conversion_events')
+[ "$task_events" = '0' ] || { echo 'Loss history created a conversion' >&2; exit 1; }
+echo 'PASS: concurrent loss exactly once; reopen/second loss history=2; conversions=0'

@@ -91,6 +91,7 @@ beforeAll(async () => {
     'supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql',
     'supabase/migrations/20260917051426_inbound_deal_and_card_context.sql',
     'supabase/migrations/20260917053602_deal_card_reply_indicator.sql',
+    'supabase/migrations/20260917054725_dashboard_loss_history_and_response_metrics.sql',
   ])
     await db.exec(readFileSync(path, 'utf8'));
   await db.exec(`UPDATE pipeline_stages SET meta_conversion_event='LeadSubmitted' WHERE id='${LEAD}';

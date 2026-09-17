@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
+import { useDashboardLossReasons } from '@/hooks/use-dashboard-loss-reasons'
 import { formatCurrency } from '@/lib/currency'
 import {
   MessageSquare,
@@ -32,6 +33,7 @@ import { QuickActions } from '@/components/dashboard/quick-actions'
 import { ConversationsChart } from '@/components/dashboard/conversations-chart'
 import { PipelineDonut } from '@/components/dashboard/pipeline-donut'
 import { ResponseTimeChart } from '@/components/dashboard/response-time-chart'
+import { LossReasonsChart } from '@/components/dashboard/loss-reasons-chart'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 
 import { useTranslations } from 'next-intl'
@@ -40,7 +42,8 @@ type RangeDays = 7 | 30 | 90
 
 export default function DashboardPage() {
   const t = useTranslations('Dashboard.page')
-  const { defaultCurrency } = useAuth()
+  const { defaultCurrency, accountId } = useAuth()
+  const losses = useDashboardLossReasons(accountId)
   const [metrics, setMetrics] = useState<MetricsBundle | null>(null)
   const [metricsLoading, setMetricsLoading] = useState(true)
 
@@ -60,6 +63,7 @@ export default function DashboardPage() {
 
   const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(null)
   const [responseTimeLoading, setResponseTimeLoading] = useState(true)
+  const [responseTimeError, setResponseTimeError] = useState(false)
 
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
   const [activityLoading, setActivityLoading] = useState(true)
@@ -85,11 +89,6 @@ export default function DashboardPage() {
       .catch((err) => console.error('[dashboard] pipeline failed:', err))
       .finally(() => setPipelineLoading(false))
 
-    void loadResponseTime(db)
-      .then((r) => setResponseTime(r))
-      .catch((err) => console.error('[dashboard] response time failed:', err))
-      .finally(() => setResponseTimeLoading(false))
-
     // Fetch up to 50 so the biggest page-size option in the feed
     // (50 rows) is already in memory — switching sizes then becomes
     // a pure client-side slice with no extra round trip.
@@ -102,6 +101,33 @@ export default function DashboardPage() {
   useEffect(() => {
     loadAll()
   }, [loadAll])
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      await Promise.resolve();
+      if (!active) return;
+      setResponseTime(null);
+      setResponseTimeLoading(true);
+      setResponseTimeError(false);
+      if (!accountId) {
+        setResponseTimeLoading(false);
+        return;
+      }
+      try {
+        const result = await loadResponseTime(createClient(), accountId);
+        if (active) setResponseTime(result);
+      } catch {
+        if (active) setResponseTimeError(true);
+      } finally {
+        if (active) setResponseTimeLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [accountId]);
 
   // Range switch handler — kept in an event callback (not an effect)
   // so the setState calls stay out of the react-hooks/set-state-in-effect
@@ -217,7 +243,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Response time */}
-      <ResponseTimeChart data={responseTime} loading={responseTimeLoading} />
+      <LossReasonsChart {...losses} />
+      <ResponseTimeChart data={responseTime} loading={responseTimeLoading} error={responseTimeError} />
 
       {/* Activity feed */}
       <ActivityFeed items={activity} loading={activityLoading} />

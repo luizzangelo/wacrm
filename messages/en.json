@@ -160,15 +160,36 @@
     },
     "responseTimeChart": {
       "title": "Average First Response Time",
-      "description": "Minutes to reply to a customer's first unreplied message, by weekday",
+      "description": "Time to answer the first unanswered message, in the current week",
       "target": "target {minutes}m",
       "thisWeek": "This week:",
       "lastWeek": "Last week:",
       "noReplies": "No replies recorded yet",
-      "noRepliesHint": "This chart fills in as you reply to customer messages."
+      "noRepliesHint": "This chart fills in as you reply to customer messages.",
+      "noSamples": "No replies on this day",
+      "loadError": "Unable to load data. Please try again.",
+      "weekdays": {
+        "sunday": "Sun",
+        "monday": "Mon",
+        "tuesday": "Tue",
+        "wednesday": "Wed",
+        "thursday": "Thu",
+        "friday": "Fri",
+        "saturday": "Sat"
+      }
     },
     "emptyState": {
       "title": "Not enough data yet"
+    },
+    "lossReasonsChart": {
+      "title": "Loss reasons",
+      "description": "Number of lost leads by reason",
+      "period": "Period",
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "lostCount": "{count, plural, one {# lost lead} other {# lost leads}}",
+      "loadError": "Unable to load data. Please try again."
     }
   },
   "Inbox": {

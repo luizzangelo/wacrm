@@ -160,15 +160,36 @@
     },
     "responseTimeChart": {
       "title": "Tempo médio da primeira resposta",
-      "description": "Minutos para responder à primeira mensagem do cliente ainda não respondida, por dia da semana",
+      "description": "Tempo para responder à primeira mensagem ainda não respondida, na semana atual",
       "target": "meta {minutes}min",
       "thisWeek": "Esta semana:",
       "lastWeek": "Semana passada:",
       "noReplies": "Nenhuma resposta registrada ainda",
-      "noRepliesHint": "Este gráfico será preenchido conforme você responder às mensagens dos clientes."
+      "noRepliesHint": "Este gráfico será preenchido conforme você responder às mensagens dos clientes.",
+      "noSamples": "Sem respostas neste dia",
+      "loadError": "Não foi possível carregar os dados. Tente novamente.",
+      "weekdays": {
+        "sunday": "Dom",
+        "monday": "Seg",
+        "tuesday": "Ter",
+        "wednesday": "Qua",
+        "thursday": "Qui",
+        "friday": "Sex",
+        "saturday": "Sáb"
+      }
     },
     "emptyState": {
       "title": "Ainda não há dados suficientes"
+    },
+    "lossReasonsChart": {
+      "title": "Motivos de perda",
+      "description": "Quantidade de leads perdidos por motivo",
+      "period": "Período",
+      "day": "Dia",
+      "week": "Semana",
+      "month": "Mês",
+      "lostCount": "{count, plural, =0 {# leads perdidos} one {# lead perdido} other {# leads perdidos}}",
+      "loadError": "Não foi possível carregar os dados. Tente novamente."
     }
   },
   "Inbox": {

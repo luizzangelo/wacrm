@@ -35,7 +35,7 @@ export interface PipelineDonutData {
 }
 
 export interface ResponseTimeBucket {
-  /** 0 = Mon … 6 = Sun (Monday-first). */
+  /** 0 = Sun … 6 = Sat; CURRENT calendar week, account timezone. */
   dow: number
   /** Average first-response time in minutes. Null means no samples. */
   avgMinutes: number | null
@@ -46,6 +46,12 @@ export interface ResponseTimeSummary {
   buckets: ResponseTimeBucket[]
   thisWeekAvg: number | null
   lastWeekAvg: number | null
+}
+
+export type LossPeriod = 'day' | 'week' | 'month'
+export interface LossReasonCount {
+  reason: import('@/lib/deals/lifecycle').LostReason
+  count: number
 }
 
 export type ActivityKind =
