@@ -15,12 +15,25 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createClient } from '@/lib/supabase/client';
-
-const MIN_PASSWORD_LENGTH = 8;
+import {
+  AUTH_EMAIL_SELF_SERVICE_ENABLED,
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_MINIMUM_MESSAGE,
+  validNewPassword,
+} from '@/lib/auth/policy';
+import { PasswordSupportCard } from '@/components/auth/password-support-card';
 
 type RecoveryState = 'checking' | 'ready' | 'success' | 'error';
 
 export default function ResetPasswordPage() {
+  return AUTH_EMAIL_SELF_SERVICE_ENABLED ? (
+    <ResetPasswordForm />
+  ) : (
+    <PasswordSupportCard />
+  );
+}
+
+function ResetPasswordForm() {
   const supabase = createClient();
   const [state, setState] = useState<RecoveryState>('checking');
   const [password, setPassword] = useState('');
@@ -68,10 +81,8 @@ export default function ResetPasswordPage() {
     event.preventDefault();
     setError(null);
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(
-        `Password must contain at least ${MIN_PASSWORD_LENGTH} characters.`
-      );
+    if (!validNewPassword(password)) {
+      setError(PASSWORD_MINIMUM_MESSAGE);
       return;
     }
 
@@ -82,10 +93,17 @@ export default function ResetPasswordPage() {
 
     setSaving(true);
 
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-
-    if (updateError) {
-      setError(updateError.message);
+    const response = await fetch('/api/auth/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'recovery', password }),
+    }).catch(() => null);
+    const result = await response?.json().catch(() => null);
+    if (!response?.ok) {
+      setError(
+        result?.error ||
+          'Não foi possível alterar a senha. Tente novamente mais tarde.'
+      );
       setSaving(false);
       return;
     }

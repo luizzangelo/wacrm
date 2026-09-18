@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Loader2, KeyRound } from 'lucide-react';
 
-import { createClient } from '@/lib/supabase/client';
-import { useAuth } from '@/hooks/use-auth';
+import {
+  MIN_PASSWORD_LENGTH as MIN_PASSWORD,
+  validNewPassword,
+} from '@/lib/auth/policy';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,12 +20,8 @@ import {
 } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
 
-const MIN_PASSWORD = 8;
-
 export function PasswordForm() {
   const t = useTranslations('Settings.profile');
-  const { profile } = useAuth();
-  const supabase = createClient();
 
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -33,11 +31,7 @@ export function PasswordForm() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile?.email) {
-      toast.error(t('cannotChangeNoEmail'));
-      return;
-    }
-    if (next.length < MIN_PASSWORD) {
+    if (!validNewPassword(next)) {
       setConfirmError(t('passwordTooShort', { min: MIN_PASSWORD }));
       return;
     }
@@ -49,24 +43,21 @@ export function PasswordForm() {
     setSaving(true);
 
     try {
-      // Supabase doesn't expose a "verify password without issuing a
-      // session" API, so we re-authenticate with the provided current
-      // password. If it matches, the session refreshes silently; if it
-      // doesn't, we abort before calling updateUser.
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: profile.email,
-        password: current,
+      const response = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'change',
+          currentPassword: current,
+          password: next,
+        }),
       });
-      if (signInError) {
-        toast.error(t('currentPasswordIncorrect'));
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: next,
-      });
-      if (updateError) {
-        toast.error(t('passwordUpdateFailed', { message: updateError.message }));
+      const result = await response.json();
+      if (!response.ok) {
+        toast.error(
+          result.error ||
+            t('passwordUpdateFailed', { message: 'Tente novamente.' })
+        );
         return;
       }
 
@@ -85,8 +76,8 @@ export function PasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <KeyRound className="size-4 text-primary" />
+        <CardTitle className="text-foreground flex items-center gap-2">
+          <KeyRound className="text-primary size-4" />
           {t('passwordTitle')}
         </CardTitle>
         <CardDescription className="text-muted-foreground">
@@ -145,7 +136,7 @@ export function PasswordForm() {
           </div>
 
           {confirmError && (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <p className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs">
               {confirmError}
             </p>
           )}

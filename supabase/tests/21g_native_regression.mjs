@@ -17,6 +17,7 @@ const aa="current_setting('audit.account_a')::uuid",ab="current_setting('audit.a
 const extra=[['automations','a','name,trigger_type',"'Synthetic automation','manual'"],['flows','b','name,trigger_type',"'Synthetic flow','manual'"],['broadcasts','c','name,template_name',"'Synthetic broadcast','synthetic_template'"]];
 let sql=`BEGIN; SET LOCAL TIME ZONE 'UTC';
 ${process.env.WACRM_AUDIT_MIGRATION ? fs.readFileSync(process.env.WACRM_AUDIT_MIGRATION,'utf8') : ''}
+${process.env.WACRM_AUTH_EMAIL_MIGRATION ? fs.readFileSync(process.env.WACRM_AUTH_EMAIL_MIGRATION,'utf8') : ''}
 INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES('${a}','audit-a@example.invalid','{"full_name":"Synthetic Audit A"}'),('${b}','audit-b@example.invalid','{"full_name":"Synthetic Audit B"}');
 SELECT set_config('audit.account_a',account_id::text,true) FROM profiles WHERE user_id='${a}';
 SELECT set_config('audit.account_b',account_id::text,true) FROM profiles WHERE user_id='${b}';
@@ -41,6 +42,33 @@ SELECT set_config('request.jwt.claim.sub','${a}',true),set_config('request.jwt.c
 SET LOCAL ROLE authenticated;
 `;
 function test(name,statement){sql+=`SAVEPOINT audit_case; DO $audit$ DECLARE affected bigint; BEGIN BEGIN ${statement}; GET DIAGNOSTICS affected = ROW_COUNT; SET CONSTRAINTS ALL IMMEDIATE; RAISE NOTICE 'AUDIT %',jsonb_build_object('case','${name}','accepted',true,'rows',affected); EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'AUDIT %',jsonb_build_object('case','${name}','accepted',false,'sqlstate',SQLSTATE); END; END $audit$; ROLLBACK TO SAVEPOINT audit_case; RELEASE SAVEPOINT audit_case;\n`;}
+if(process.env.WACRM_AUTH_EMAIL_MIGRATION){
+  sql+=`RESET ROLE; SAVEPOINT auth_email_sync;
+    DO $snapshot$ BEGIN
+      PERFORM set_config('audit.profile_a_before',(to_jsonb(p)-'email'-'updated_at')::text,true) FROM profiles p WHERE user_id='${a}';
+      PERFORM set_config('audit.profile_b_before',to_jsonb(p)::text,true) FROM profiles p WHERE user_id='${b}';
+    END $snapshot$;
+    SET LOCAL ROLE supabase_auth_admin;
+    UPDATE auth.users SET email='audit-a-changed@example.invalid' WHERE id='${a}';
+    RESET ROLE;
+    DO $verify$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM profiles p WHERE user_id='${a}' AND email='audit-a-changed@example.invalid'
+        AND (to_jsonb(p)-'email'-'updated_at')::text=current_setting('audit.profile_a_before')) THEN
+        RAISE EXCEPTION 'Auth email synchronization or tenant invariance failed';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM profiles p WHERE user_id='${b}' AND to_jsonb(p)::text=current_setting('audit.profile_b_before')) THEN
+        RAISE EXCEPTION 'Auth email synchronization affected user B';
+      END IF;
+      IF has_function_privilege('anon','wacrm_private.sync_auth_email_to_profile()','EXECUTE') OR
+        has_function_privilege('authenticated','wacrm_private.sync_auth_email_to_profile()','EXECUTE') OR
+        has_function_privilege('service_role','wacrm_private.sync_auth_email_to_profile()','EXECUTE') THEN
+        RAISE EXCEPTION 'Privileged email trigger publicly callable';
+      END IF;
+    END $verify$;
+    SELECT jsonb_build_object('case','auth_email_sync_native','passed',true,'auth_admin_role',true,'tenant_unchanged',true,'B_unchanged',true);
+    ROLLBACK TO SAVEPOINT auth_email_sync; RELEASE SAVEPOINT auth_email_sync; SET LOCAL ROLE authenticated;
+  `;
+}
 for(const [table,key,value] of [['contacts','id',cb],['conversations','id',vb],['messages','id',mb],['pipelines','id',pb],['pipeline_stages','id',sb],['deals','id',db],['tags','id',tb],['custom_fields','id',fb]]){
 sql+=`SELECT jsonb_build_object('case','A_cannot_read_B_${table}','visible',count(*)) FROM ${table} WHERE ${key}='${value}';\n`;
 test('A_cannot_delete_B_'+table,`DELETE FROM ${table} WHERE ${key}='${value}'`);
@@ -195,5 +223,5 @@ for(const bucket of ['avatars','flow-media'])if(find('A_cannot_insert_B_storage_
 if(find('A_reads_B_storage_metadata').visible!==0||find('B_reads_notification_from_A_assignment').visible!==0)throw new Error('Notification/Storage leak');
 if(find('status_update_with_tenant_filter').affected_accounts!==1)throw new Error('Status affected foreign tenant');
 if(find('signup_bootstrap').initial_pipelines!==2||!find('official_orphan_account_creation').different_from_A_B||!find('official_onboarding_idempotent').same||!find('official_invite_redeem').correct_account)throw new Error('Onboarding/invitation regression');
-fs.writeFileSync(root+'/saas-regression-21g.json',JSON.stringify({function_drift:drift,policy_drift:policyDrift,constraint_drift:constraintDrift,cases,rollback_unchanged:true,external_integrations:false},null,2),{mode:0o600});console.log(JSON.stringify({observations:cases.length,pass:true,rollback_unchanged:true,external_integrations:false}));
+fs.writeFileSync(root+(process.env.WACRM_AUTH_EMAIL_MIGRATION ? '/auth-email-regression-local.json' : '/saas-regression-21g.json'),JSON.stringify({function_drift:drift,policy_drift:policyDrift,constraint_drift:constraintDrift,cases,rollback_unchanged:true,external_integrations:false},null,2),{mode:0o600});console.log(JSON.stringify({observations:cases.length,pass:true,rollback_unchanged:true,external_integrations:false}));
 }finally{if(started){run('/usr/bin/sandbox-exec',['-p',state.policy,lab+'/runtime/bin/pg_ctl','stop','-D',state.data,'-m','fast','-w','-t','30']);console.log('Private historical lab stopped.');}}

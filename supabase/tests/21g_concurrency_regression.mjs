@@ -26,6 +26,7 @@ try {
   before=fingerprint();
   query(`CREATE DATABASE ${clone} TEMPLATE ${state.database};`,'postgres');created=true;
   query(`BEGIN; ${fs.readFileSync(new URL('../migrations/20260918004200_saas_tenant_boundaries_and_bootstrap.sql',import.meta.url),'utf8')} COMMIT;`);
+  if(process.env.WACRM_AUTH_EMAIL_MIGRATION) query(`BEGIN; ${fs.readFileSync(process.env.WACRM_AUTH_EMAIL_MIGRATION,'utf8')} COMMIT;`);
   query(`INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES('${A}','21g-a@example.invalid','{}'),('${B}','21g-b@example.invalid','{}'),('${C}','21g-c@example.invalid','{}');
     INSERT INTO public.account_invitations(account_id,role,token_hash,expires_at) SELECT account_id,'agent','21g-concurrent-invite',now()+interval '1 hour' FROM profiles WHERE user_id='${A}';`);
   const invites=await Promise.all([session(actor(C,"SELECT public.redeem_invitation('21g-concurrent-invite')")),session(actor(C,"SELECT public.redeem_invitation('21g-concurrent-invite')"))]);
@@ -58,7 +59,7 @@ try {
   assert.deepEqual(owner,{owners:1,matching:1});
   observations.push({case:'ownership_transfer_vs_member_removal',success:1,denied:1,one_owner:true,pointer_consistent:true});
   assert.equal(fingerprint(),before);
-  fs.writeFileSync(root+'/saas-concurrency-21g.json',JSON.stringify({observations,original_restore_unchanged:true,external_integrations:false,pass:true},null,2),{mode:0o600});
+  fs.writeFileSync(root+(process.env.WACRM_AUTH_EMAIL_MIGRATION ? '/auth-email-concurrency-local.json' : '/saas-concurrency-21g.json'),JSON.stringify({observations,original_restore_unchanged:true,external_integrations:false,pass:true},null,2),{mode:0o600});
   console.log(JSON.stringify({observations:observations.length,pass:true,original_restore_unchanged:true,external_integrations:false}));
 } finally {
   if(created)query(`DROP DATABASE ${clone};`,'postgres');
