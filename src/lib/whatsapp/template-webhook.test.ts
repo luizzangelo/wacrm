@@ -19,6 +19,7 @@ function makeSupabaseStub(
     table: string;
     update?: Record<string, unknown>;
     filter?: { column: string; value: unknown };
+    tenant?: string;
   }[] = [];
 
   const stub = {
@@ -32,6 +33,7 @@ function makeSupabaseStub(
             eq(column: string, value: unknown) {
               entry.filter = { column, value };
               return {
+                eq(column:string,value:string) { if(column!=='account_id') throw new Error('Unexpected scope'); entry.tenant=value; return this; },
                 select() {
                   return Promise.resolve(selectResult);
                 },
@@ -92,7 +94,7 @@ describe('handleTemplateWebhookChange — status update', () => {
           message_template_language: 'en_US',
         },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(supabaseCalls).toHaveLength(1);
     expect(supabaseCalls[0].table).toBe('message_templates');
@@ -118,7 +120,7 @@ describe('handleTemplateWebhookChange — status update', () => {
           reason: 'Template uses non-compliant language.',
         },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls[0].update?.status).toBe('REJECTED');
     expect(calls[0].update?.rejection_reason).toBe(
@@ -133,7 +135,7 @@ describe('handleTemplateWebhookChange — status update', () => {
         field: 'message_template_status_update',
         value: { event: 'REJECTED', message_template_id: '7' },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls[0].update?.rejection_reason).toBe('Rejected by Meta');
   });
@@ -145,7 +147,7 @@ describe('handleTemplateWebhookChange — status update', () => {
         field: 'message_template_status_update',
         value: { event: 'PENDING_REVIEW', message_template_id: '1' },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls[0].update?.status).toBe('PENDING');
   });
@@ -157,7 +159,7 @@ describe('handleTemplateWebhookChange — status update', () => {
         field: 'message_template_status_update',
         value: { event: 'APPROVED' },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls).toHaveLength(0);
   });
@@ -174,7 +176,7 @@ describe('handleTemplateWebhookChange — status update', () => {
           message_template_name: 'mystery',
         },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(warn).toHaveBeenCalled();
   });
@@ -192,7 +194,7 @@ describe('handleTemplateWebhookChange — quality update', () => {
           new_quality_score: 'YELLOW',
         },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls[0].update).toEqual({ quality_score: 'YELLOW' });
     expect(calls[0].filter).toEqual({
@@ -211,7 +213,7 @@ describe('handleTemplateWebhookChange — quality update', () => {
           new_quality_score: 'PURPLE', // not a real Meta value
         },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls[0].update).toEqual({ quality_score: null });
   });
@@ -229,7 +231,7 @@ describe('handleTemplateWebhookChange — components update', () => {
           message_template_name: 'x',
         },
       },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls).toHaveLength(0);
     expect(info).toHaveBeenCalled();
@@ -245,7 +247,7 @@ describe('handleTemplateWebhookChange — unknown field', () => {
       // the dispatch should still be safe if the filter is bypassed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       { field: 'message_template_future_field' as any, value: {} },
-      stub,
+      stub, 'acct-1',
     );
     expect(calls).toHaveLength(0);
   });

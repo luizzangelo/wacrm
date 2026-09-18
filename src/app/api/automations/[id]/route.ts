@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { requireRole, toErrorResponse } from '@/lib/auth/account'
+import { getCurrentAccount, requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import {
   loadStepsTree,
@@ -13,11 +12,8 @@ import {
 } from '@/lib/automations/validate'
 
 async function requireUser() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user
+  try { const ctx=await getCurrentAccount(); return {id:ctx.userId,accountId:ctx.accountId} }
+  catch { return null }
 }
 
 export async function GET(
@@ -32,14 +28,13 @@ export async function GET(
   const { data: automation, error } = await admin
     .from('automations')
     .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .maybeSingle()
+    .eq('id', id).eq('account_id',user.accountId)
+        .maybeSingle()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!automation) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const steps = await loadStepsTree(id)
+  const steps = await loadStepsTree(id,user.accountId)
   return NextResponse.json({ automation, steps })
 }
 
@@ -70,10 +65,10 @@ export async function PATCH(
   // to compute the post-patch "effective" state for validation.
   const { data: existing } = await admin
     .from('automations')
-    .select('id, user_id, is_active, trigger_type, trigger_config')
-    .eq('id', id)
+    .select('id, account_id, is_active, trigger_type, trigger_config')
+    .eq('id', id).eq('account_id',user.accountId)
     .maybeSingle()
-  if (!existing || existing.user_id !== user.id) {
+  if (!existing || existing.account_id !== user.accountId) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -99,7 +94,7 @@ export async function PATCH(
     const mergedTriggerConfig = update.trigger_config ?? existing.trigger_config
     const mergedSteps = Array.isArray(body.steps)
       ? (body.steps as { step_type: string; step_config: Record<string, unknown> }[])
-      : await loadStepsTree(id)
+      : await loadStepsTree(id,user.accountId)
     const issues = [
       ...validateTriggerForActivation(mergedTriggerType, mergedTriggerConfig),
       ...validateStepsForActivation(mergedSteps),
@@ -119,12 +114,12 @@ export async function PATCH(
     const { error: updErr } = await admin
       .from('automations')
       .update(update)
-      .eq('id', id)
+      .eq('id', id).eq('account_id',user.accountId)
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
   }
 
   if (Array.isArray(body.steps)) {
-    const err = await replaceSteps(id, body.steps as BuilderStepInput[])
+    const err = await replaceSteps(id, body.steps as BuilderStepInput[],user.accountId)
     if (err) return NextResponse.json({ error: err }, { status: 500 })
   }
 
@@ -151,8 +146,7 @@ export async function DELETE(
   const { error } = await supabaseAdmin()
     .from('automations')
     .delete()
-    .eq('id', id)
-    .eq('user_id', user.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    .eq('id', id).eq('account_id',user.accountId)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

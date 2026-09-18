@@ -71,7 +71,7 @@ export async function dispatchInboundToAiReply(
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
-      .eq('id', conversationId)
+      .eq('id', conversationId).eq('account_id',accountId)
       .maybeSingle()
     if (convErr || !conv) return
     if (conv.assigned_agent_id) return // a human owns this thread
@@ -154,7 +154,7 @@ export async function dispatchInboundToAiReply(
       if (config.handoffAgentId && !conv.assigned_agent_id) {
         update.assigned_agent_id = config.handoffAgentId
       }
-      await db.from('conversations').update(update).eq('id', conversationId)
+      await db.from('conversations').update(update).eq('id', conversationId).eq('account_id',accountId)
       return
     }
 

@@ -2,7 +2,7 @@
 
 import { operationalErrorFields } from '@/lib/security/operational-log';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { attachDealConversationSummaries } from '@/lib/deals/card-context';
 import type { DealConversationSummary } from '@/types';
@@ -81,7 +81,6 @@ export default function PipelinesPage() {
   const [defaultStageId, setDefaultStageId] = useState<string>('');
 
   // Guard against double-seeding (React StrictMode double-effect in dev).
-  const seedAttempted = useRef(false);
 
   const loadPipelines = useCallback(async () => {
     const { data, error } = await supabase
@@ -134,54 +133,13 @@ export default function PipelinesPage() {
     [supabase]
   );
 
-  const seedDefaultPipeline =
-    useCallback(async (): Promise<Pipeline | null> => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) return null;
-      // pipelines.account_id is NOT NULL post-017 with no DB default.
-      if (!accountId) return null;
-
-      const { data: pipeline, error } = await supabase
-        .from('pipelines')
-        .insert({
-          user_id: user.id,
-          account_id: accountId,
-          name: 'Sales Pipeline',
-        })
-        .select()
-        .single();
-
-      if (error || !pipeline) {
-        console.error('Failed to seed pipeline:', operationalErrorFields(error));
-        return null;
-      }
-
-      const stagesPayload = SPEC_DEFAULT_STAGES.map((s) => ({
-        pipeline_id: pipeline.id,
-        name: s.name,
-        color: s.color,
-        position: s.position,
-      }));
-      await supabase.from('pipeline_stages').insert(stagesPayload);
-
-      return pipeline as Pipeline;
-    }, [supabase, accountId]);
-
-  // Initial load + seed-if-empty
+  // Defaults are provisioned atomically by the account bootstrap, never here.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      let list = await loadPipelines();
+      const list = await loadPipelines();
 
-      if (list.length === 0 && !seedAttempted.current) {
-        seedAttempted.current = true;
-        const seeded = await seedDefaultPipeline();
-        if (seeded) list = await loadPipelines();
-      }
 
       if (cancelled) return;
       setPipelines(list);
@@ -197,7 +155,7 @@ export default function PipelinesPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadPipelines, seedDefaultPipeline]);
+  }, [loadPipelines]);
 
   // Load stages + deals whenever selected pipeline changes.
   // Clearing on no-selection is a legitimate sync with URL/prop

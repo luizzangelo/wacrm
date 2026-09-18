@@ -143,7 +143,7 @@ export async function resumePendingExecution(pending: {
   const { data: automation, error } = await db
     .from('automations')
     .select('*')
-    .eq('id', pending.automation_id)
+    .eq('id', pending.automation_id).eq('account_id',pending.account_id)
     .single()
 
   if (error || !automation) {
@@ -248,7 +248,7 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
   const baseQuery = db
     .from('automation_steps')
     .select('*')
-    .eq('automation_id', args.automation.id)
+    .eq('automation_id', args.automation.id).eq('account_id',args.automation.account_id)
     .gte('position', args.startPosition)
     .order('position', { ascending: true })
 

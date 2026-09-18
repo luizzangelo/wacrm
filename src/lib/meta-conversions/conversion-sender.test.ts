@@ -1184,3 +1184,34 @@ describe('Meta conversion repository selection', () => {
     expect(query.eq).toHaveBeenCalledWith('account_id', ACCOUNT);
   });
 });
+
+describe('21G: privileged Meta sender fails closed on foreign rows', () => {
+  it.each(['config','attribution','contact'] as const)('rejects foreign %s before claim/decrypt/transport',async(resource)=>{
+    const repository=new MemoryRepository();
+    if(resource==='config') repository.storedConfig=config({account_id:'account-B',dataset_id:'dataset-B'});
+    if(resource==='attribution') repository.storedAttribution=attribution({account_id:'account-B',waba_id:'waba-B'});
+    if(resource==='contact') repository.getContact=async()=>contact({account_id:'account-B'});
+    const deliver=vi.fn(),decryptToken=vi.fn();
+    await expect(processMetaConversionEvent({
+      repository,accountId:ACCOUNT,eventDbId:EVENT_DB_ID,deliver,decryptToken,
+    })).resolves.toEqual({status:'failed',attempt:null});
+    expect(repository.claims).toBe(0);expect(deliver).not.toHaveBeenCalled();expect(decryptToken).not.toHaveBeenCalled();
+  });
+  it('concurrent A/B payloads contain only their own WABA and original CTWA',async()=>{
+    const A=new MemoryRepository(),B=new MemoryRepository(event({id:'event-B',account_id:'account-B'}));
+    B.storedConfig=config({account_id:'account-B',dataset_id:'dataset-B'});
+    B.storedAttribution=attribution({account_id:'account-B',waba_id:'waba-B',ctwa_clid:'ctwa-B'});
+    B.storedContact=null;
+    const deliver=vi.fn().mockResolvedValue(success);
+    await Promise.all([
+      processOne(A,deliver),
+      processMetaConversionEvent({repository:B,accountId:'account-B',eventDbId:'event-B',decryptToken:()=> 'token-B',deliver}),
+    ]);
+    const requests=deliver.mock.calls.map(([request])=>({dataset:request.datasetId,waba:request.payload.data[0].user_data.whatsapp_business_account_id,ctwa:request.payload.data[0].user_data.ctwa_clid}));
+    expect(requests).toEqual(expect.arrayContaining([
+      {dataset:'dataset-1',waba:'waba-snapshot-1',ctwa:'CtWa_RAW_keep-byte-for-byte'},
+      {dataset:'dataset-B',waba:'waba-B',ctwa:'ctwa-B'},
+    ]));
+    expect(requests).toHaveLength(2);
+  });
+});

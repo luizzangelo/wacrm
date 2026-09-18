@@ -3,6 +3,14 @@ import type { Conversation, Message } from '@/types';
 import { serializeConversation, serializeMessage } from './conversations';
 
 describe('serializeConversation', () => {
+  it('does not serialize a foreign contact embedded by service-role',()=>{
+    const conv={account_id:'A',contact_id:'c',contact:{id:'c',account_id:'B'}} as unknown as Conversation;
+    expect(()=>serializeConversation(conv)).toThrow('tenant');
+  });
+  it('does not serialize a foreign tag embedded by service-role',()=>{
+    const conv={account_id:'A',contact_id:'c',contact:{id:'c',account_id:'A',tags:[{account_id:'B'}]}} as unknown as Conversation;
+    expect(()=>serializeConversation(conv)).toThrow('tenant');
+  });
   it('projects public fields + nested contact/tags and drops internals', () => {
     const conv = {
       id: 'conv1',
@@ -17,9 +25,10 @@ describe('serializeConversation', () => {
       updated_at: '2026-01-01T00:00:00Z',
       contact: {
         id: 'c1',
+        account_id: 'internal-acct',
         phone: '+1',
         name: 'Jane',
-        tags: [{ id: 't1', name: 'vip', color: '#fff' }],
+        tags: [{ id: 't1', account_id:'internal-acct', name: 'vip', color: '#fff' }],
       },
     } as unknown as Conversation;
 

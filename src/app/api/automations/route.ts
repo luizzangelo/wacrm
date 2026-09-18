@@ -127,7 +127,7 @@ export async function POST(request: Request) {
   }
 
   if (effectiveSteps && effectiveSteps.length > 0) {
-    const err = await insertSteps(automation.id, effectiveSteps)
+    const err = await insertSteps(automation.id, effectiveSteps,accountId)
     if (err) return NextResponse.json({ error: err }, { status: 500 })
   }
 

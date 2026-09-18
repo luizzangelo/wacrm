@@ -413,13 +413,14 @@ async function sendButtonsAndSuspend(
     .from("messages")
     .select("id")
     .eq("message_id", whatsapp_message_id)
+    .eq("account_id", run.account_id)
     .maybeSingle();
   await db
     .from("flow_runs")
     .update({
       last_prompt_message_id: (msg as { id: string } | null)?.id ?? null,
     })
-    .eq("id", run.id);
+    .eq("id", run.id).eq("account_id", run.account_id);
   return { outcome: "advanced", node_key: node.node_key };
 }
 
@@ -455,13 +456,14 @@ async function sendListAndSuspend(
     .from("messages")
     .select("id")
     .eq("message_id", whatsapp_message_id)
+    .eq("account_id", run.account_id)
     .maybeSingle();
   await db
     .from("flow_runs")
     .update({
       last_prompt_message_id: (msg as { id: string } | null)?.id ?? null,
     })
-    .eq("id", run.id);
+    .eq("id", run.id).eq("account_id", run.account_id);
   return { outcome: "advanced", node_key: node.node_key };
 }
 
@@ -475,12 +477,18 @@ async function executeHandoff(
     status: "pending",
     updated_at: new Date().toISOString(),
   };
-  if (cfg.assign_to) convUpdate.assigned_agent_id = cfg.assign_to;
+  if (cfg.assign_to) {
+    const { data: member, error } = await db.from('profiles').select('user_id')
+      .eq('user_id', cfg.assign_to).eq('account_id', run.account_id).maybeSingle();
+    if (error || !member) throw new Error('Handoff assignee is not an account member');
+    convUpdate.assigned_agent_id = cfg.assign_to;
+  }
   if (run.conversation_id) {
     await db
       .from("conversations")
       .update(convUpdate)
-      .eq("id", run.conversation_id);
+      .eq("id", run.conversation_id).eq("account_id", run.account_id)
+      .eq("account_id", run.account_id);
   }
   await logEvent(db, run.id, "handoff", node.node_key, {
     note: cfg.note ?? null,
@@ -530,7 +538,7 @@ async function evaluateConditionNode(
     const { data } = await db
       .from("contacts")
       .select(cfg.subject_key)
-      .eq("id", run.contact_id!)
+      .eq("id", run.contact_id!).eq("account_id", run.account_id)
       .maybeSingle();
     const raw = (data as Record<string, unknown> | null)?.[cfg.subject_key];
     subjectValue = typeof raw === "string" && raw.length > 0 ? raw : undefined;
@@ -688,13 +696,14 @@ async function advanceFromNodeKey(
           .from("messages")
           .select("id")
           .eq("message_id", whatsapp_message_id)
+    .eq("account_id", run.account_id)
           .maybeSingle();
         await db
           .from("flow_runs")
           .update({
             last_prompt_message_id: (msg as { id: string } | null)?.id ?? null,
           })
-          .eq("id", run.id);
+          .eq("id", run.id).eq("account_id", run.account_id);
       } catch (err) {
         await logEvent(db, run.id, "error", node.node_key, {
           reason: "collect_input_prompt_failed",
@@ -984,7 +993,7 @@ async function handleReplyForActiveRun(
           vars: newVars,
           reprompt_count: 0,
         })
-        .eq("id", run.id);
+        .eq("id", run.id).eq("account_id", run.account_id);
       if (!capErr) {
         // Mirror the UPDATE in-memory so downstream interpolation in
         // the advance loop sees the captured var without us having to
@@ -1012,7 +1021,7 @@ async function handleReplyForActiveRun(
       const { error } = await db
         .from("flow_runs")
         .update({ reprompt_count: 0 })
-        .eq("id", run.id);
+        .eq("id", run.id).eq("account_id", run.account_id);
       if (!error) run.reprompt_count = 0;
     }
     const outcome = await advanceFromNodeKey(db, run, matched, nodes);
@@ -1031,7 +1040,7 @@ async function handleReplyForActiveRun(
   await db
     .from("flow_runs")
     .update({ reprompt_count: newReprompts })
-    .eq("id", run.id);
+    .eq("id", run.id).eq("account_id", run.account_id);
 
   const action = decideFallback({ policy, reprompt_count: newReprompts });
   await logEvent(db, run.id, "fallback_fired", run.current_node_key, {
@@ -1074,7 +1083,7 @@ async function handleReplyForActiveRun(
       await db
         .from("conversations")
         .update({ status: "pending", updated_at: new Date().toISOString() })
-        .eq("id", run.conversation_id);
+        .eq("id", run.conversation_id).eq("account_id", run.account_id);
     }
     await logEvent(db, run.id, "handoff", run.current_node_key, {
       reason: "fallback_exhausted",

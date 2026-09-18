@@ -208,17 +208,25 @@ interface CapturedWrites {
 function sendPathDb(
   templateRows: unknown[],
   captured: CapturedWrites,
-  contactPhone = '+15551234567'
+  contactPhone = '+15551234567',
+  forge?: 'conversation' | 'contact' | 'contact_id' | 'config',
 ): SupabaseClient {
   const conversation = {
     id: 'cv-1',
-    contact: { id: 'ct-1', phone: contactPhone },
+    account_id: 'acct-1',
+    contact_id: 'ct-1',
+    contact: { id: 'ct-1', account_id: 'acct-1', phone: contactPhone },
   };
   const config = {
     id: 'cfg-1',
+    account_id: 'acct-1',
     phone_number_id: 'pn-1',
     access_token: 'token',
   };
+  if (forge==='conversation') conversation.account_id='acct-B';
+  if (forge==='contact') conversation.contact.account_id='acct-B';
+  if (forge==='contact_id') conversation.contact_id='ct-B';
+  if (forge==='config') config.account_id='acct-B';
 
   return {
     from(table: string) {
@@ -266,6 +274,16 @@ const TEMPLATE_ROW = {
   body_text: 'Your order {{1}} ships on {{2}}',
   created_at: '2026-01-01T00:00:00Z',
 };
+
+describe('21G: outbound rejects inconsistent privileged resource bindings',()=>{
+  it.each(['conversation','contact','contact_id','config'] as const)('fails closed for forged %s before Meta or writes',async(forge)=>{
+    const captured:CapturedWrites={};
+    await expect(sendMessageToConversation(sendPathDb([],captured,'+15551234567',forge),'acct-1',{
+      conversationId:'cv-1',messageType:'text',contentText:'synthetic',
+    })).rejects.toBeInstanceOf(SendMessageError);
+    expect(captured).toEqual({});
+  });
+});
 
 describe('sendMessageToConversation — template persistence (#483)', () => {
   it('stores the substituted body when the caller sends no text', async () => {

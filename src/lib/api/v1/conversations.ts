@@ -52,6 +52,9 @@ export interface ApiMessage {
  */
 export function serializeConversation(conv: Conversation): ApiConversation {
   const c = conv.contact;
+  if (c && (!conv.account_id || c.account_id!==conv.account_id || c.id!==conv.contact_id ||
+      (c.tags??[]).some(tag=>tag.account_id!==conv.account_id)))
+    throw new Error('Conversation resource tenant mismatch');
   return {
     id: conv.id,
     contact_id: conv.contact_id,

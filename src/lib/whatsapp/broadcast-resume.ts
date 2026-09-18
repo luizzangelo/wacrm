@@ -234,6 +234,7 @@ export async function planBroadcastResume(
   }
 
   const plan: BroadcastPlan = {
+    accountId,
     broadcastId,
     templateName: broadcast.template_name,
     templateLanguage: resolvedTemplate.language,

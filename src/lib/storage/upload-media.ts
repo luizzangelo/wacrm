@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { privateObjectUrl } from './private-reference';
 
 /**
  * Shared media-upload helper for Supabase Storage buckets that use the
@@ -77,15 +78,15 @@ export function buildMediaPath(
 }
 
 export interface UploadAccountMediaResult {
-  /** Public URL Meta can fetch at send time. */
+  /** Legacy field name: durable private application reference, never public. */
   publicUrl: string;
   /** Storage object path (account-scoped). */
   path: string;
 }
 
 /**
- * Upload a file to an account-scoped Storage bucket and return its public
- * URL. Throws with a user-facing message on auth / account-resolution /
+ * Upload a file to an account-scoped private bucket and return its protected
+ * application reference. Throws on auth / account-resolution /
  * upload failure — callers surface it via a toast.
  *
  * Size validation is the caller's responsibility (limits can differ per
@@ -125,11 +126,7 @@ export async function uploadAccountMedia(
   });
   if (upErr) throw new Error(upErr.message);
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(bucket).getPublicUrl(path);
-
-  return { publicUrl, path };
+  return { publicUrl: privateObjectUrl(bucket, path), path };
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   templateContentText,
 } from '@/lib/whatsapp/template-body'
 import { supabaseAdmin } from './admin-client'
+import {requireConversationRecipient} from '@/lib/security/tenant-resource'
 
 // ------------------------------------------------------------
 // Automation-side Meta sender.
@@ -111,6 +112,7 @@ type SendInput =
 
 async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
+  await requireConversationRecipient(db,input.accountId,input.conversationId,input.contactId)
 
   // Scope the contact + config lookups by account_id, not user_id.
   // The engine uses the service-role client (bypassing RLS); without

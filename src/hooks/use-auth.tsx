@@ -224,6 +224,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (!data) {
+        // Safe idempotent recovery: the server/RPC derives auth.uid(), never
+        // accepts an existing tenant id or a client-selected membership role.
+        const recovery = await fetch('/api/account', {
+          method:'POST',headers:{'Content-Type':'application/json'},body:'{}',
+        });
+        if (recovery.ok) {
+          const result = await supabase.from('profiles').select(
+            'id, full_name, email, avatar_url, role, beta_features, account_id, account_role',
+          ).eq('user_id',userId).maybeSingle();
+          if (!result.error) data=result.data;
+        }
+      }
       if (data) {
         // Load the account with a plain lookup by id instead of an
         // embedded FK join. The embed (`account:accounts!inner(...)`)

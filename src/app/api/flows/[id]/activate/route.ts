@@ -56,7 +56,7 @@ export async function POST(
   // Ownership via RLS — caller's client.
   const { data: existing } = await supabase
     .from('flows')
-    .select('id')
+    .select('id,account_id')
     .eq('id', id)
     .maybeSingle()
   if (!existing) {
@@ -71,12 +71,12 @@ export async function POST(
       admin
         .from('flows')
         .select('name, trigger_type, trigger_config, entry_node_id')
-        .eq('id', id)
+        .eq('id', id).eq('account_id',existing.account_id)
         .maybeSingle(),
       admin
         .from('flow_nodes')
         .select('node_key, node_type, config')
-        .eq('flow_id', id),
+        .eq('flow_id', id).eq('account_id',existing.account_id),
     ])
     if (!flow) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -110,6 +110,7 @@ export async function POST(
     .from('flows')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('account_id',existing.account_id)
     .select()
     .maybeSingle()
   if (error) {

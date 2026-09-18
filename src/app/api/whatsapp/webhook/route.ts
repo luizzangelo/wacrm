@@ -258,10 +258,14 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
       // dedicated handler. Skip the messaging branches below so we
       // don't try to read message-shaped fields off a template event.
       if (isTemplateWebhookField(change.field)) {
-        await handleTemplateWebhookChange(
-          { field: change.field, value: change.value as unknown },
-          supabaseAdmin(),
-        )
+        const { data: configs, error } = await supabaseAdmin().from('whatsapp_config')
+          .select('account_id').eq('waba_id', entry.id)
+        if (!error) for (const config of configs ?? []) {
+          await handleTemplateWebhookChange(
+            { field: change.field, value: change.value as unknown },
+            supabaseAdmin(), config.account_id,
+          )
+        }
         continue
       }
 
@@ -316,7 +320,9 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
 
       const config = configRows[0]
 
-      const decryptedAccessToken = decrypt(config.access_token)
+      let decryptedAccessToken: string
+      try { decryptedAccessToken = decrypt(config.access_token) }
+      catch { console.error('WhatsApp config decryption failed for matched tenant'); continue }
 
       for (let i = 0; i < value.messages.length; i++) {
         const message = value.messages[i]
@@ -447,6 +453,11 @@ async function handleStatusUpdate(
   status: WhatsAppStatusUpdate,
   phoneNumberId: string
 ) {
+  if (!phoneNumberId) return
+  const { data: configs, error } = await supabaseAdmin().from('whatsapp_config')
+    .select('account_id').eq('phone_number_id', phoneNumberId)
+  if (error || configs?.length !== 1 || !configs[0].account_id) return
+  const accountId = configs[0].account_id
   // 1) Mirror onto messages (legacy behavior) — Meta's status values
   //    already match the CHECK constraint on messages.status. No
   //    `.select()`: message_id is NOT unique (migration 009 — Meta ids
@@ -456,6 +467,7 @@ async function handleStatusUpdate(
     .from('messages')
     .update({ status: status.status })
     .eq('message_id', status.id)
+    .eq('account_id', accountId)
 
   if (msgErr) {
     console.error('Error updating message status:', operationalErrorFields(msgErr))
@@ -475,6 +487,7 @@ async function handleStatusUpdate(
     .from('broadcast_recipients')
     .select('id, status')
     .eq('whatsapp_message_id', status.id)
+    .eq('account_id', accountId)
     .maybeSingle()
 
   if (recFetchErr) {
@@ -494,6 +507,7 @@ async function handleStatusUpdate(
       .from('broadcast_recipients')
       .update(update)
       .eq('id', recipient.id)
+      .eq('account_id', accountId)
 
     if (recUpdateErr) {
       console.error('Error updating broadcast recipient status:', operationalErrorFields(recUpdateErr))
@@ -508,6 +522,7 @@ async function handleStatusUpdate(
     .from('messages')
     .select('conversation_id, conversations(account_id)')
     .eq('message_id', status.id)
+    .eq('account_id', accountId)
     .limit(1)
     .maybeSingle()
 
@@ -787,6 +802,7 @@ async function processMessage(
     .upsert(
       {
         conversation_id: conversation.id,
+        account_id: accountId,
         sender_type: 'customer',
         content_type: contentType,
         content_text: contentText,

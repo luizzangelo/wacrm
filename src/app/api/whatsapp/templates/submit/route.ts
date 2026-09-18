@@ -1,3 +1,4 @@
+import {templateMediaForDelivery} from '@/lib/storage/delivery-url';
 import { operationalErrorFields } from '@/lib/security/operational-log';
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
       // building the payload. Surfaces a 400 with an actionable message
       // (missing META_APP_ID, unreachable URL, wrong type/size).
       try {
-        await ensureImageHeaderHandle(payload, accessToken)
+        await ensureImageHeaderHandle(payload, accessToken, {supabase,accountId})
       } catch (e) {
         return NextResponse.json(
           { error: e instanceof Error ? e.message : 'Header image upload failed.' },
@@ -178,7 +179,7 @@ export async function POST(request: Request) {
         )
       }
 
-      const metaPayload = buildMetaTemplatePayload(payload)
+      const metaPayload = buildMetaTemplatePayload(await templateMediaForDelivery(supabase,accountId,payload))
       try {
         const meta = await submitMessageTemplate({
           wabaId: config.waba_id,

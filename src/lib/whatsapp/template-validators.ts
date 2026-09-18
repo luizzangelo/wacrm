@@ -155,7 +155,7 @@ export function validateHeader(
   }
   if (header_media_url) {
     try {
-      const u = new URL(header_media_url);
+      const u = new URL(header_media_url, header_media_url.startsWith('/api/storage/') ? 'https://private-reference.invalid' : undefined);
       if (u.protocol !== 'https:' && u.protocol !== 'http:') {
         throw new Error('header_media_url must use http(s) scheme.');
       }

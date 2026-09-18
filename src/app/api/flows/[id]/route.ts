@@ -24,6 +24,7 @@ async function requireOwnership(
   | {
       ok: true
       userId: string
+      accountId: string
       supabase: Awaited<ReturnType<typeof createClient>>
     }
   | { ok: false; status: number; body: { error: string } }
@@ -39,13 +40,13 @@ async function requireOwnership(
   // returns null (404 below).
   const { data: flow } = await supabase
     .from('flows')
-    .select('id')
+    .select('id,account_id')
     .eq('id', flowId)
     .maybeSingle()
   if (!flow) {
     return { ok: false, status: 404, body: { error: 'Not found' } }
   }
-  return { ok: true, userId: user.id, supabase }
+  return { ok: true, userId: user.id, accountId:flow.account_id, supabase }
 }
 
 export async function GET(
@@ -58,11 +59,11 @@ export async function GET(
   const { supabase } = guard
 
   const [{ data: flow }, { data: nodes }] = await Promise.all([
-    supabase.from('flows').select('*').eq('id', id).maybeSingle(),
+    supabase.from('flows').select('*').eq('id', id).eq('account_id',guard.accountId).maybeSingle(),
     supabase
       .from('flow_nodes')
       .select('*')
-      .eq('flow_id', id)
+      .eq('flow_id', id).eq('account_id',guard.accountId)
       .order('created_at', { ascending: true }),
   ])
   if (!flow) {
@@ -138,7 +139,7 @@ export async function PUT(
   const { error: updErr } = await admin
     .from('flows')
     .update(flowPatch)
-    .eq('id', id)
+    .eq('id', id).eq('account_id',guard.accountId)
   if (updErr) {
     return NextResponse.json({ error: updErr.message }, { status: 500 })
   }
@@ -149,7 +150,7 @@ export async function PUT(
     const { error: delErr } = await admin
       .from('flow_nodes')
       .delete()
-      .eq('flow_id', id)
+      .eq('flow_id', id).eq('account_id',guard.accountId)
     if (delErr) {
       return NextResponse.json({ error: delErr.message }, { status: 500 })
     }
@@ -173,11 +174,11 @@ export async function PUT(
   // Re-fetch and return the new state — the editor uses the response
   // to reconcile its local form state.
   const [{ data: flow }, { data: nodes }] = await Promise.all([
-    admin.from('flows').select('*').eq('id', id).maybeSingle(),
+    admin.from('flows').select('*').eq('id', id).eq('account_id',guard.accountId).maybeSingle(),
     admin
       .from('flow_nodes')
       .select('*')
-      .eq('flow_id', id)
+      .eq('flow_id', id).eq('account_id',guard.accountId)
       .order('created_at', { ascending: true }),
   ])
   return NextResponse.json({ flow, nodes: nodes ?? [] })
@@ -205,10 +206,9 @@ export async function DELETE(
   // mechanism in v1, but that's intentional: deleting a flow is a
   // deliberate destructive action and the partial unique index will
   // free up the contact for new triggers immediately.
-  const { error } = await supabaseAdmin().from('flows').delete().eq('id', id)
+  const { error } = await supabaseAdmin().from('flows').delete().eq('id', id).eq('account_id',guard.accountId)
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json({ ok: true })
 }
-

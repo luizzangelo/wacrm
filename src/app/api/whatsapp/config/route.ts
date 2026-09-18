@@ -1,4 +1,5 @@
 import { operationalErrorFields } from '@/lib/security/operational-log';
+import { hasMinRole, isAccountRole, type AccountRole } from '@/lib/auth/roles';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
@@ -22,13 +23,14 @@ import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 async function resolveAccountId(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
+  minRole: AccountRole = 'viewer',
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('account_id')
+    .select('account_id, account_role')
     .eq('user_id', userId)
     .maybeSingle()
-  if (error || !data?.account_id) return null
+  if (error || !data?.account_id || !isAccountRole(data.account_role) || !hasMinRole(data.account_role, minRole)) return null
   return data.account_id as string
 }
 
@@ -177,7 +179,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user.id, 'admin')
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
@@ -452,7 +454,7 @@ export async function DELETE() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user.id, 'admin')
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },

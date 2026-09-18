@@ -38,6 +38,8 @@ import {
 } from '@/lib/whatsapp/interactive';
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
+import { mediaUrlForDelivery,templateMediaForDelivery } from '@/lib/storage/delivery-url';
+import type {SendTimeParams} from '@/lib/whatsapp/template-send-builder';
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -236,6 +238,9 @@ export async function sendMessageToConversation(
   }
 
   const contact = conversation.contact;
+  if (conversation.account_id !== accountId || contact?.account_id !== accountId || contact.id !== conversation.contact_id) {
+    throw new SendMessageError('not_found', 'Conversation/contact tenant mismatch', 404);
+  }
   if (!contact?.phone) {
     throw new SendMessageError(
       'bad_request',
@@ -260,7 +265,7 @@ export async function sendMessageToConversation(
     .eq('account_id', accountId)
     .single();
 
-  if (configError || !config) {
+  if (configError || !config || config.account_id !== accountId) {
     throw new SendMessageError(
       'whatsapp_not_configured',
       'WhatsApp not configured. Please set up your WhatsApp integration first.',
@@ -269,6 +274,7 @@ export async function sendMessageToConversation(
   }
 
   const accessToken = decrypt(config.access_token);
+  const deliveryMediaUrl = isMediaKind && mediaUrl ? await mediaUrlForDelivery(db, accountId, mediaUrl) : mediaUrl;
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
   if (isLegacyFormat(config.access_token)) {
@@ -338,6 +344,15 @@ export async function sendMessageToConversation(
     sendLanguage = resolved.language;
   }
 
+  const deliveryTemplate = templateRow ? await templateMediaForDelivery(db,accountId,templateRow) : null;
+  const structuredParams = templateMessageParams && typeof templateMessageParams==='object' && !Array.isArray(templateMessageParams)
+    ? templateMessageParams as SendTimeParams : undefined;
+  if (structuredParams?.headerMediaUrl !== undefined && typeof structuredParams.headerMediaUrl !== 'string') {
+    throw new SendMessageError('bad_request','Invalid header media reference',400);
+  }
+  const deliveryParams = structuredParams?.headerMediaUrl ? {
+    ...structuredParams,headerMediaUrl:await mediaUrlForDelivery(db,accountId,structuredParams.headerMediaUrl),
+  } : structuredParams;
   const attempt = async (phone: string): Promise<string> => {
     if (messageType === 'template') {
       const result = await sendTemplateMessage({
@@ -346,8 +361,8 @@ export async function sendMessageToConversation(
         to: phone,
         templateName: templateName!,
         language: sendLanguage,
-        template: templateRow ?? undefined,
-        messageParams: templateMessageParams ?? undefined,
+        template: deliveryTemplate ?? undefined,
+        messageParams: deliveryParams ?? undefined,
         params: templateParams || [],
         contextMessageId,
       });
@@ -359,7 +374,7 @@ export async function sendMessageToConversation(
         accessToken,
         to: phone,
         kind: messageType as MediaKind,
-        link: mediaUrl!,
+        link: deliveryMediaUrl!,
         caption: contentText || undefined,
         filename: filename || undefined,
         contextMessageId,

@@ -158,7 +158,7 @@ describe("mirrorInboundMedia", () => {
     );
     expect(uploads[0].options.contentType).toBe("image/jpeg");
     expect(url).toBe(
-      `https://cdn.test/storage/chat-media/account-${ACCOUNT}/inbound/${MEDIA_ID}-image-1754899200.jpg`,
+      `/api/storage/chat-media/account-${ACCOUNT}/inbound/${MEDIA_ID}-image-1754899200.jpg`,
     );
   });
 

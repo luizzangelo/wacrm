@@ -16,6 +16,8 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { supabaseAdmin } from './admin-client'
+import {requireConversationRecipient} from '@/lib/security/tenant-resource'
+import { mediaUrlForDelivery } from '@/lib/storage/delivery-url'
 
 // ------------------------------------------------------------
 // Flows-side Meta sender (interactive variants).
@@ -66,6 +68,7 @@ export async function engineSendText(
   args: SendTextEngineArgs,
 ): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
+  await requireConversationRecipient(db,args.accountId,args.conversationId,args.contactId)
 
   const { data: contact, error: contactErr } = await db
     .from('contacts')
@@ -176,6 +179,7 @@ export async function engineSendMedia(
   args: SendMediaEngineArgs,
 ): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
+  await requireConversationRecipient(db,args.accountId,args.conversationId,args.contactId)
 
   const { data: contact, error: contactErr } = await db
     .from('contacts')
@@ -202,6 +206,7 @@ export async function engineSendMedia(
   }
 
   const accessToken = decrypt(config.access_token)
+  const deliveryLink = await mediaUrlForDelivery(db, args.accountId, args.link)
 
   const attempt = async (phone: string): Promise<string> => {
     const r = await sendMediaMessage({
@@ -209,7 +214,7 @@ export async function engineSendMedia(
       accessToken,
       to: phone,
       kind: args.kind,
-      link: args.link,
+      link: deliveryLink,
       caption: args.caption,
       filename: args.filename,
     })
@@ -326,6 +331,7 @@ async function sendInteractiveViaMeta(
 ): Promise<{ whatsapp_message_id: string }> {
   const db = supabaseAdmin()
 
+  await requireConversationRecipient(db,input.accountId,input.conversationId,input.contactId)
   // Scope the contact + whatsapp_config lookups by account_id —
   // same defense-in-depth rationale as automations/meta-send.ts.
   // Migration 017 moved both tables to account-scoped tenancy.

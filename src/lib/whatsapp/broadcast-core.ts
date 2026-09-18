@@ -18,6 +18,7 @@ import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {templateMediaForDelivery} from '@/lib/storage/delivery-url';
 
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
 import { decrypt } from '@/lib/whatsapp/encryption';
@@ -64,6 +65,7 @@ interface PlannedRecipient {
 }
 
 export interface BroadcastPlan {
+  accountId?: string;
   broadcastId: string;
   templateName: string;
   templateLanguage: string;
@@ -233,6 +235,7 @@ export async function createBroadcast(
 
   return {
     broadcastId,
+    accountId,
     templateName,
     templateLanguage: resolvedTemplate.language,
     phoneNumberId: config.phone_number_id,
@@ -267,13 +270,14 @@ export async function deliverBroadcast(
 
     for (const variant of variants) {
       try {
+        const template = plan.templateRow ? await templateMediaForDelivery(db,plan.accountId ?? '',plan.templateRow) : undefined;
         const result = await sendTemplateMessage({
           phoneNumberId: plan.phoneNumberId,
           accessToken: plan.accessToken,
           to: variant,
           templateName: plan.templateName,
           language: plan.templateLanguage,
-          template: plan.templateRow ?? undefined,
+          template,
           params: recipient.params,
         });
         sentMessageId = result.messageId;

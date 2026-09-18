@@ -1,0 +1,20 @@
+// Read-only runtime preservation check. Never prints paths, PII or credentials.
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+const base=process.env.NEXT_PUBLIC_SUPABASE_URL;
+assert.equal(new URL(base).hostname,'awganmhowivedfocwzjy.supabase.co');
+const key=readFileSync('/run/secrets/wacrm_staging_supabase_service_role','utf8').trim();
+const headers={apikey:key,Authorization:`Bearer ${key}`};
+const get=async(path,authenticated=true)=>fetch(base+path,{method:'GET',headers:authenticated?headers:{},redirect:'error',signal:AbortSignal.timeout(15000)});
+const profiles=await get('/rest/v1/profiles?select=avatar_url&avatar_url=not.is.null');
+assert.equal(profiles.status,200);
+const rows=await profiles.json();assert.equal(rows.length,1);
+const url=new URL(rows[0].avatar_url,'https://crm.luizangelo.com.br');
+const path=url.pathname.replace(/^\/api\/storage\/avatars\//,'').replace(/^\/storage\/v1\/object\/(public|authenticated|sign)\/avatars\//,'');
+assert.notEqual(path,url.pathname);
+const authenticated=await get('/storage/v1/object/authenticated/avatars/'+path);
+assert.equal(authenticated.status,200);
+const bytes=Buffer.from(await authenticated.arrayBuffer());assert.ok(bytes.length>0);
+const publicRead=await get('/storage/v1/object/public/avatars/'+path,false);
+console.log(JSON.stringify({avatar_count:rows.length,avatar_bytes:bytes.length,avatar_sha256:createHash('sha256').update(bytes).digest('hex'),authenticated_http:authenticated.status,anonymous_public_http:publicRead.status,private_reference:url.pathname.startsWith('/api/storage/')}));

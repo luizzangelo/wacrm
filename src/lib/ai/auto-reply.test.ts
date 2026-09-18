@@ -40,13 +40,14 @@ vi.mock('./admin-client', () => ({
       return {
         select: () => ({
           eq: () => ({
+            eq: () => ({maybeSingle: () => Promise.resolve({data:h.state.conv,error:null})}),
             maybeSingle: () =>
               Promise.resolve({ data: h.state.conv, error: null }),
           }),
         }),
         update: (payload: Record<string, unknown>) => {
           h.state.updatePayload = payload
-          return { eq: () => Promise.resolve({ error: null }) }
+          return { eq: () => ({eq:()=>Promise.resolve({error:null})}) }
         },
       }
     },

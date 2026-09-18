@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import {parsePrivateObjectUrl} from '@/lib/storage/private-reference';
 import { Contact, CustomField, MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ function isMediaHeaderType(value: unknown): value is MediaHeaderType {
 
 function isValidHttpUrl(value: string): boolean {
   try {
+    if (value.startsWith('/api/storage/') && parsePrivateObjectUrl(value)) return true;
     const u = new URL(value);
     return u.protocol === 'http:' || u.protocol === 'https:';
   } catch {

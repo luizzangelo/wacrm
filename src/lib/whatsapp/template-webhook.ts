@@ -80,18 +80,22 @@ export async function handleTemplateWebhookChange(
   // the admin client and exposes it as `any`. Type as the generic
   // SupabaseClient here so this module is testable in isolation.
   supabase: SupabaseClient,
+  accountId?: string,
 ): Promise<void> {
+  if (!accountId) return // Fail closed; no global template-id lookup.
   switch (change.field) {
     case 'message_template_status_update':
       await handleStatusUpdate(
         change.value as TemplateStatusUpdateValue,
         supabase,
+        accountId,
       )
       return
     case 'message_template_quality_update':
       await handleQualityUpdate(
         change.value as TemplateQualityUpdateValue,
         supabase,
+        accountId,
       )
       return
     case 'message_template_components_update':
@@ -105,6 +109,7 @@ export async function handleTemplateWebhookChange(
 async function handleStatusUpdate(
   value: TemplateStatusUpdateValue,
   supabase: SupabaseClient,
+  accountId: string,
 ): Promise<void> {
   const metaTemplateId =
     value.message_template_id !== undefined
@@ -135,6 +140,7 @@ async function handleStatusUpdate(
     .from('message_templates')
     .update(update)
     .eq('meta_template_id', metaTemplateId)
+    .eq('account_id', accountId)
     .select('id')
 
   if (error) {
@@ -162,6 +168,7 @@ async function handleStatusUpdate(
 async function handleQualityUpdate(
   value: TemplateQualityUpdateValue,
   supabase: SupabaseClient,
+  accountId: string,
 ): Promise<void> {
   const metaTemplateId =
     value.message_template_id !== undefined
@@ -185,6 +192,7 @@ async function handleQualityUpdate(
     .from('message_templates')
     .update({ quality_score: score })
     .eq('meta_template_id', metaTemplateId)
+    .eq('account_id', accountId)
 
   if (error) {
     console.error(

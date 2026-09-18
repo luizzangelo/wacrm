@@ -19,7 +19,7 @@ const TYPE_ICON: Record<Notification["type"], typeof Bell> = {
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { accountId } = useAuth();
+  const { accountId,user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[] | null>(
     null,
   );
@@ -50,32 +50,35 @@ export default function NotificationsPage() {
   // Realtime — new assignments appear without a refresh, and a
   // "mark all read" fired from another tab/device stays in sync here.
   useEffect(() => {
+    if (!accountId || !user) return;
     const supabase = createClient();
     const channel = supabase
       .channel("notifications-page")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
+        { event: "INSERT", schema: "public", table: "notifications", filter:`account_id=eq.${accountId}` },
         (payload) => {
           if (payload.eventType === "INSERT") {
             const row = payload.new as Notification;
+            if (row.account_id!==accountId || row.user_id!==user.id) return;
             setNotifications((prev) => {
               if (!prev) return [row];
               if (prev.some((n) => n.id === row.id)) return prev;
               return [row, ...prev];
             });
-          } else if (payload.eventType === "UPDATE") {
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notifications", filter:`account_id=eq.${accountId}` },
+        (payload) => {
             const row = payload.new as Notification;
+            if (row.account_id!==accountId || row.user_id!==user.id) return;
             setNotifications((prev) =>
               prev?.map((n) => (n.id === row.id ? { ...n, ...row } : n)) ??
               prev,
             );
-          } else if (payload.eventType === "DELETE") {
-            const oldRow = payload.old as Partial<Notification>;
-            setNotifications(
-              (prev) => prev?.filter((n) => n.id !== oldRow.id) ?? prev,
-            );
-          }
         },
       )
       .subscribe();
@@ -83,7 +86,7 @@ export default function NotificationsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [accountId,user]);
 
   const markRead = useCallback(
     async (id: string) => {
@@ -102,13 +105,14 @@ export default function NotificationsPage() {
         .from("notifications")
         .update({ read_at: new Date().toISOString() })
         .eq("id", id)
+        .eq('account_id',accountId)
         .is("read_at", null);
       if (updateErr) {
         toast.error("Failed to mark notification as read");
         load();
       }
     },
-    [load],
+    [load,accountId],
   );
 
   const handleClick = useCallback(
@@ -134,13 +138,14 @@ export default function NotificationsPage() {
     const { error: updateErr } = await supabase
       .from("notifications")
       .update({ read_at: now })
+      .eq('account_id',accountId)
       .is("read_at", null);
     setMarkingAll(false);
     if (updateErr) {
       toast.error("Failed to mark all as read");
       load();
     }
-  }, [unreadIds.length, load]);
+  }, [unreadIds.length, load,accountId]);
 
   if (error) {
     return (

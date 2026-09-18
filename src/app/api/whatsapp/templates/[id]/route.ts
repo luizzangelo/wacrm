@@ -1,4 +1,6 @@
+import {templateMediaForDelivery} from '@/lib/storage/delivery-url';
 import { operationalErrorFields } from '@/lib/security/operational-log';
+import { hasMinRole, isAccountRole } from '@/lib/auth/roles';
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
@@ -70,11 +72,11 @@ export async function PATCH(
     // lookups work for teammates who didn't author the row.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle()
     const accountId = profile?.account_id as string | undefined
-    if (!accountId) {
+    if (!accountId || !isAccountRole(profile?.account_role) || !hasMinRole(profile.account_role, 'admin')) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
         { status: 403 },
@@ -155,7 +157,7 @@ export async function PATCH(
       // Image headers need a fresh Resumable-Upload handle on every edit
       // (Meta replaces components wholesale). Derive from header_media_url.
       try {
-        await ensureImageHeaderHandle(payload, accessToken)
+        await ensureImageHeaderHandle(payload, accessToken, {supabase,accountId})
       } catch (e) {
         return NextResponse.json(
           { error: e instanceof Error ? e.message : 'Header image upload failed.' },
@@ -163,7 +165,7 @@ export async function PATCH(
         )
       }
 
-      const metaPayload = buildMetaTemplatePayload(payload)
+      const metaPayload = buildMetaTemplatePayload(await templateMediaForDelivery(supabase,accountId,payload))
       try {
         await editMessageTemplate({
           metaTemplateId: existing.meta_template_id,
@@ -257,11 +259,11 @@ export async function DELETE(
     // the shared whatsapp_config.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle()
     const accountId = profile?.account_id as string | undefined
-    if (!accountId) {
+    if (!accountId || !isAccountRole(profile?.account_role) || !hasMinRole(profile.account_role, 'admin')) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
         { status: 403 },
@@ -308,6 +310,7 @@ export async function DELETE(
       .from('message_templates')
       .delete()
       .eq('id', id)
+      .eq('account_id', accountId)
     if (delErr) {
       return NextResponse.json(
         {

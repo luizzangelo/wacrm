@@ -466,6 +466,9 @@ export async function processMetaConversionEvent(options: {
       'conversion_config_missing'
     );
   }
+  if (config.account_id !== accountId) {
+    return markPreflight(repository,event,'failed','conversion_config_tenant_mismatch');
+  }
   if (!config.enabled) {
     return markPreflight(
       repository,
@@ -500,10 +503,16 @@ export async function processMetaConversionEvent(options: {
     );
   }
 
+  if (attribution.account_id !== accountId || attribution.id !== event.attribution_id) {
+    return markPreflight(repository,event,'failed','conversion_attribution_tenant_mismatch');
+  }
   const contact = attribution.contact_id
     ? await repository.getContact(accountId, attribution.contact_id)
     : null;
 
+  if (contact && (contact.account_id !== accountId || contact.id !== attribution.contact_id)) {
+    return markPreflight(repository,event,'failed','conversion_contact_tenant_mismatch');
+  }
   const payload = buildMetaConversionPayload(event, attribution, contact);
   if (!payload) {
     return markPreflight(

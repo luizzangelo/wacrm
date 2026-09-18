@@ -37,7 +37,9 @@ const h = vi.hoisted(() => ({
       conversations: { account_id: string }
     } | null,
     statusRecipientRow: null as { id: string; status: string } | null,
-    messageStatusUpdates: [] as { status: string; messageId: string }[],
+    phoneAccounts: null as Record<string, string> | null,
+    storedStatuses: [] as {accountId: string; messageId: string; status: string}[],
+    messageStatusUpdates: [] as { status: string; messageId: string; accountId: string }[],
   },
 }))
 
@@ -57,12 +59,12 @@ vi.mock('@supabase/supabase-js', () => ({
         case 'whatsapp_config':
           return {
             select: () => ({
-              eq: () =>
+              eq: (_column: string, phone: string) =>
                 Promise.resolve({
-                  data: [
+                  data: h.state.phoneAccounts && !h.state.phoneAccounts[phone] ? [] : [
                     {
                       id: 'whatsapp-config-1',
-                      account_id: 'acc-1',
+                      account_id: h.state.phoneAccounts?.[phone] ?? 'acc-1',
                       user_id: 'user-1',
                       access_token: 'enc',
                       waba_id: 'waba-1',
@@ -78,12 +80,12 @@ vi.mock('@supabase/supabase-js', () => ({
           // findOrCreateConversation: select().eq().eq().order().limit()
           return {
             select: () => ({
-              eq: () => ({
+              eq: (_column: string, accountId: string) => ({
                 eq: () => ({
                   order: () => ({
                     limit: () =>
                       Promise.resolve({
-                        data: [h.state.conversation],
+                        data: [h.state.phoneAccounts ? { ...h.state.conversation, id: `conv-${accountId}`, account_id: accountId } : h.state.conversation],
                         error: null,
                       }),
                   }),
@@ -98,6 +100,7 @@ vi.mock('@supabase/supabase-js', () => ({
               columns === 'id, status'
                 ? {
                     eq: () => ({
+                      eq: () => ({ maybeSingle: () => Promise.resolve({data:h.state.statusRecipientRow,error:null}) }),
                       maybeSingle: () =>
                         Promise.resolve({
                           data: h.state.statusRecipientRow,
@@ -138,6 +141,7 @@ vi.mock('@supabase/supabase-js', () => ({
                 : _columns === 'conversation_id, conversations(account_id)'
                   ? {
                       eq: () => ({
+                        eq: () => ({limit:()=>({maybeSingle:()=>Promise.resolve({data:h.state.statusMessageRow,error:null})})}),
                         limit: () => ({
                           maybeSingle: () =>
                             Promise.resolve({
@@ -161,11 +165,11 @@ vi.mock('@supabase/supabase-js', () => ({
                   },
             update: (row: { status: string }) => ({
               eq: (_column: string, messageId: string) => {
-                h.state.messageStatusUpdates.push({
-                  status: row.status,
-                  messageId,
-                })
-                return Promise.resolve({ error: null })
+                return {eq: (_column:string,accountId:string) => {
+                  h.state.messageStatusUpdates.push({status:row.status,messageId,accountId});
+                  for (const stored of h.state.storedStatuses) if(stored.accountId===accountId && stored.messageId===messageId) stored.status=row.status;
+                  return Promise.resolve({error:null});
+                }}
               },
             }),
             // Idempotent insert: upsert(...).select('id')
@@ -219,8 +223,8 @@ vi.mock('@/lib/whatsapp/meta-api', () => ({
   downloadMedia: vi.fn(),
 }))
 vi.mock('@/lib/contacts/dedupe', () => ({
-  findExistingContact: vi.fn(async () => ({
-    id: 'contact-1',
+  findExistingContact: vi.fn(async (_db: unknown, accountId: string) => ({
+    id: h.state.phoneAccounts ? `contact-${accountId}` : 'contact-1',
     name: 'Ada',
     phone: '15551230000',
   })),
@@ -318,6 +322,8 @@ beforeEach(() => {
   h.state.statusMessageRow = null
   h.state.statusRecipientRow = null
   h.state.messageStatusUpdates = []
+  h.state.phoneAccounts = null
+  h.state.storedStatuses = []
   mockGetMediaUrl.mockResolvedValue({
     url: 'https://lookaside.fbsbx.com/whatsapp/abc',
     mimeType: 'image/jpeg',
@@ -474,7 +480,7 @@ describe('WhatsApp webhook: unmatched delivery-status observability', () => {
     })
 
     expect(h.state.messageStatusUpdates).toEqual([
-      { status: 'delivered', messageId: 'wamid.CORRELATED-12345678' },
+      { status: 'delivered', messageId: 'wamid.CORRELATED-12345678', accountId: 'acc-1' },
     ])
     expect(h.dispatchWebhookEvent).toHaveBeenCalledWith(
       expect.anything(),
@@ -719,7 +725,7 @@ describe('inbound webhook: inbound media is mirrored (#466)', () => {
     )
     expect(h.state.upsertCalls[0].row).toMatchObject({
       media_url:
-        'https://cdn.test/chat-media/account-acc-1/inbound/1234567890123456-image-1700000000.jpg',
+        '/api/storage/chat-media/account-acc-1/inbound/1234567890123456-image-1700000000.jpg',
       // Meta's MIME type used to be discarded outright (`void mediaType`).
       media_type: 'image/jpeg',
     })
@@ -846,5 +852,50 @@ describe('inbound webhook: after() awaits automations (#368)', () => {
     // If the dispatches were fire-and-forget, completed would still be 0
     // here — the callback would have resolved before the timers fired.
     expect(h.state.automationCompleted).toBe(3)
+  })
+})
+
+describe('WhatsApp multi-tenant routing (21G)', () => {
+  async function receive(values: Record<string, unknown>[]) {
+    await POST({text: async () => JSON.stringify({entry: values.map(value => ({
+      changes:[{field:'messages',value}]
+    }))}), headers:{get:()=> 'sha256=stub'}} as unknown as Request)
+    for (const callback of h.state.afterCallbacks) await callback()
+  }
+  it('status for Phone A changes only A, even when B has the same external ID', async () => {
+    h.state.phoneAccounts={'phone-A':'account-A','phone-B':'account-B'}
+    h.state.storedStatuses=[
+      {accountId:'account-A',messageId:'same-wamid',status:'sent'},
+      {accountId:'account-B',messageId:'same-wamid',status:'sent'},
+    ]
+    await receive([{metadata:{phone_number_id:'phone-A'},statuses:[
+      {id:'same-wamid',status:'delivered',timestamp:'1700000000',recipient_id:'15550000001'}
+    ]}])
+    expect(h.state.storedStatuses.map(row=>row.status)).toEqual(['delivered','sent'])
+    expect(h.state.messageStatusUpdates).toEqual([
+      {accountId:'account-A',messageId:'same-wamid',status:'delivered'}
+    ])
+  })
+  it('unknown phone fails closed without a default tenant or mutation', async () => {
+    h.state.phoneAccounts={'phone-A':'account-A','phone-B':'account-B'}
+    await receive([{metadata:{phone_number_id:'unknown'},statuses:[
+      {id:'same-wamid',status:'read',timestamp:'1700000000'}
+    ]}])
+    expect(h.state.messageStatusUpdates).toEqual([])
+    expect(h.state.upsertCalls).toEqual([])
+  })
+  it('inbound Phone A and Phone B in one webhook keep independent accounts', async () => {
+    h.state.phoneAccounts={'phone-A':'account-A','phone-B':'account-B'}
+    await receive(['A','B'].map(letter=>({
+      metadata:{phone_number_id:`phone-${letter}`},
+      contacts:[{wa_id:'15550000001',profile:{name:'Ada'}}],
+      messages:[{...TEXT_MESSAGE,id:`wamid.synthetic-${letter}`}]
+    })))
+    expect(h.state.upsertCalls.map(({row})=>({
+      account:row.account_id,conversation:row.conversation_id
+    }))).toEqual([
+      {account:'account-A',conversation:'conv-account-A'},
+      {account:'account-B',conversation:'conv-account-B'}
+    ])
   })
 })

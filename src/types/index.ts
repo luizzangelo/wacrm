@@ -116,6 +116,7 @@ export interface Contact {
 }
 
 export interface Tag {
+  account_id?: string;
   id: string;
   user_id: string;
   name: string;
@@ -158,6 +159,7 @@ export interface ContactNote {
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {
+  account_id?: string;
   id: string;
   user_id: string;
   contact_id: string;

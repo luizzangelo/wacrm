@@ -1,6 +1,9 @@
 import { uploadResumableMedia } from '@/lib/whatsapp/meta-api'
 import type { TemplatePayload } from '@/lib/whatsapp/template-validators'
 import { isDeliverableUrl } from '@/lib/webhooks/ssrf'
+import type {SupabaseClient} from '@supabase/supabase-js'
+import {parsePrivateObjectUrl} from '@/lib/storage/private-reference'
+import {mediaUrlForDelivery} from '@/lib/storage/delivery-url'
 
 /**
  * Meta requires an `example.header_handle` (from the Resumable Upload
@@ -22,10 +25,16 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png']
 export async function ensureImageHeaderHandle(
   payload: TemplatePayload,
   accessToken: string,
+  context?: {supabase: SupabaseClient; accountId: string},
 ): Promise<void> {
   if (payload.header_type !== 'image') return
   if (payload.header_handle) return // already have one
   if (!payload.header_media_url) return // validator already requires url-or-handle
+  let downloadUrl = payload.header_media_url
+  if (parsePrivateObjectUrl(downloadUrl)) {
+    if (!context) throw new Error('Private image requires account authorization')
+    downloadUrl = await mediaUrlForDelivery(context.supabase,context.accountId,downloadUrl)
+  }
 
   const appId = process.env.META_APP_ID
   if (!appId) {
@@ -40,7 +49,7 @@ export async function ensureImageHeaderHandle(
   // link-local / reserved address. Same guard, same message as the two
   // other outbound-fetch call sites (see lib/webhooks/ssrf.ts) — matching
   // the unreachable-host message keeps the failure from being an oracle.
-  if (!(await isDeliverableUrl(payload.header_media_url))) {
+  if (!(await isDeliverableUrl(downloadUrl))) {
     throw new Error('Could not fetch the header image URL. Make sure it is publicly reachable.')
   }
 
@@ -48,7 +57,7 @@ export async function ensureImageHeaderHandle(
   // and for a manually-pasted public link).
   let res: Response
   try {
-    res = await fetch(payload.header_media_url, {
+    res = await fetch(downloadUrl, {
       // Do NOT follow redirects — a public URL could 3xx-bounce to an
       // internal address, defeating the guard above. Bound the request so
       // a hung host can't tie up the template-submit handler.

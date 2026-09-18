@@ -13,6 +13,7 @@ import { operationalErrorFields } from '@/lib/security/operational-log';
 // ============================================================
 
 import { NextResponse } from "next/server";
+import {createClient} from '@/lib/supabase/server';
 
 import {
   requireRole,
@@ -38,6 +39,23 @@ export async function GET() {
 }
 
 const MAX_NAME_LEN = 80;
+
+/** No supplied account_id: only creates/recovers the authenticated user's account. */
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {data:{user},error:authError} = await supabase.auth.getUser();
+  if (authError || !user) return NextResponse.json({error:'Unauthorized'},{status:401});
+  const limit = checkRateLimit(`admin:onboard:${user.id}`,RATE_LIMITS.adminAction);
+  if (!limit.success) return rateLimitResponse(limit);
+  const body = await request.json().catch(()=>({}));
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.account_id !== undefined || body.account_role !== undefined ||
+      (body.name !== undefined && (typeof body.name !== 'string' || body.name.trim().length>MAX_NAME_LEN))) {
+    return NextResponse.json({error:'Invalid onboarding request'},{status:400});
+  }
+  const {data,error} = await supabase.rpc('create_my_account',{p_name:body.name?.trim() || null});
+  if (error || !data) return NextResponse.json({error:'Could not provision account'},{status:500});
+  return NextResponse.json({account_id:data});
+}
 
 export async function PATCH(request: Request) {
   try {
