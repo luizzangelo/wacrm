@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   app:
-    image: wacrm-staging:d638ff5
+    image: wacrm-staging:ed9ebd7
     environment:
       NODE_ENV: production
       PORT: "3000"
@@ -60,7 +60,7 @@ services:
         - traefik.http.services.wacrm_staging.loadbalancer.server.port=3000
 
   meta_conversions_scheduler:
-    image: wacrm-staging:d638ff5
+    image: wacrm-staging:ed9ebd7
     environment:
       META_CONVERSIONS_CRON_INTERVAL_MS: "120000"
       META_CONVERSIONS_CRON_TIMEOUT_MS: "70000"

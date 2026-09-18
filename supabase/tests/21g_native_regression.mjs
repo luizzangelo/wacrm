@@ -35,7 +35,7 @@ INSERT INTO meta_ad_attributions(id,account_id,contact_id,conversation_id,ctwa_c
 INSERT INTO meta_conversion_events(id,account_id,deal_id,attribution_id,event_name,event_id,event_time,status) VALUES('${id('e',1)}',${aa},'${da}','${id('d',1)}','LeadSubmitted','synthetic-event-a',now(),'failed'),('${id('e',2)}',${ab},'${db}','${id('d',2)}','LeadSubmitted','synthetic-event-b',now(),'failed');
 INSERT INTO deal_loss_events(account_id,deal_id,pipeline_id,lost_stage_id,lost_reason) VALUES(${aa},'${da}','${pa}',(SELECT id FROM pipeline_stages WHERE pipeline_id='${pa}' AND is_lost_stage),'price'),(${ab},'${db}','${pb}',(SELECT id FROM pipeline_stages WHERE pipeline_id='${pb}' AND is_lost_stage),'price');
 INSERT INTO notifications(account_id,user_id,title) VALUES(${aa},'${a}','Synthetic notification A'),(${ab},'${b}','Synthetic notification B');
-INSERT INTO storage.objects(bucket_id,name) VALUES('chat-media','account-'||${aa}::text||'/synthetic-private-a.txt'),('chat-media','account-'||${ab}::text||'/synthetic-private-b.txt');
+INSERT INTO storage.objects(bucket_id,name) VALUES('chat-media','account-'||${aa}::text||'/synthetic-private-a.txt'),('chat-media','account-'||${ab}::text||'/synthetic-private-b.txt'),('flow-media','account-'||${aa}::text||'/synthetic-flow-a.txt'),('flow-media','account-'||${ab}::text||'/synthetic-flow-b.txt'),('avatars','${a}/synthetic-avatar-a.png'),('avatars','${b}/synthetic-avatar-b.png');
 ${extra.map(([table,family,cols,values])=>`INSERT INTO ${table}(id,user_id,account_id,${cols}) VALUES('${id(family,1)}','${a}',${aa},${values}),('${id(family,2)}','${b}',${ab},${values});`).join('\n')}
 SELECT set_config('request.jwt.claim.sub','${a}',true),set_config('request.jwt.claims','{"sub":"${a}","role":"authenticated"}',true);
 SET LOCAL ROLE authenticated;
@@ -74,6 +74,14 @@ if(process.env.WACRM_AUDIT_MIGRATION){
   test('A_notification_with_B_user',`INSERT INTO notifications(account_id,user_id,title) VALUES(${aa},'${b}','Synthetic intrusion')`);
   test('A_cannot_insert_B_storage',`INSERT INTO storage.objects(bucket_id,name) VALUES('chat-media','account-'||${ab}::text||'/intrusion.txt')`);
   test('A_cannot_update_B_storage',`UPDATE storage.objects SET name='account-'||${aa}::text||'/stolen.txt' WHERE name='account-'||${ab}::text||'/synthetic-private-b.txt'`);
+
+  for(const [bucket,pathA,pathB] of [['avatars',`'${a}/synthetic-avatar-a.png'`,`'${b}/synthetic-avatar-b.png'`],['flow-media',`'account-'||${aa}::text||'/synthetic-flow-a.txt'`,`'account-'||${ab}::text||'/synthetic-flow-b.txt'`]]) {
+    sql+=`SELECT jsonb_build_object('case','A_reads_own_storage_${bucket}','visible',count(*)) FROM storage.objects WHERE bucket_id='${bucket}' AND name=${pathA};\n`;
+    sql+=`SELECT jsonb_build_object('case','A_cannot_read_B_storage_${bucket}','visible',count(*)) FROM storage.objects WHERE bucket_id='${bucket}' AND name=${pathB};\n`;
+    test('A_cannot_update_B_storage_'+bucket,`UPDATE storage.objects SET name='forged' WHERE bucket_id='${bucket}' AND name=${pathB}`);
+    test('A_cannot_delete_B_storage_'+bucket,`DELETE FROM storage.objects WHERE bucket_id='${bucket}' AND name=${pathB}`);
+    test('A_cannot_insert_B_storage_'+bucket,`INSERT INTO storage.objects(bucket_id,name) VALUES('${bucket}',${pathB}||'.forged')`);
+  }
   test('A_can_insert_own_contact',`INSERT INTO contacts(user_id,account_id,phone) VALUES('${a}',${aa},'15550000099')`);
   test('A_can_insert_own_storage',`INSERT INTO storage.objects(bucket_id,name) VALUES('chat-media','account-'||${aa}::text||'/allowed.txt')`);
 }
@@ -183,6 +191,7 @@ for(const row of cases){
 }
 for(const name of ['A_conversation_with_B_contact','A_note_with_B_contact','A_contact_with_B_tag','A_contact_with_B_custom_field','A_reply_to_B_message','A_broadcast_recipient_with_B_contact','A_deal_assigned_to_guessed_B_profile','A_owner_pointer_direct_change','orphan_auth_user_inserts_foreign_owner_profile','viewer_upload_own_chat_media','official_invite_single_use_denied','service_role_cross_conversation_denied','service_role_cross_tag_denied','service_role_cross_field_denied','service_role_cross_reply_denied','service_role_cross_recipient_denied','A_deal_with_B_pipeline','A_stage_with_B_account','A_message_with_B_account','A_notification_with_B_user','A_cannot_insert_B_storage','customized_onboarding_account_not_discarded'])if(find(name).accepted!==false)throw new Error('Attack accepted '+name);
 for(const name of ['A_can_insert_own_contact','A_can_insert_own_storage'])if(!find(name).accepted)throw new Error('Own insert blocked '+name);
+for(const bucket of ['avatars','flow-media'])if(find('A_cannot_insert_B_storage_'+bucket).accepted)throw new Error('Foreign Storage insert allowed '+bucket);
 if(find('A_reads_B_storage_metadata').visible!==0||find('B_reads_notification_from_A_assignment').visible!==0)throw new Error('Notification/Storage leak');
 if(find('status_update_with_tenant_filter').affected_accounts!==1)throw new Error('Status affected foreign tenant');
 if(find('signup_bootstrap').initial_pipelines!==2||!find('official_orphan_account_creation').different_from_A_B||!find('official_onboarding_idempotent').same||!find('official_invite_redeem').correct_account)throw new Error('Onboarding/invitation regression');

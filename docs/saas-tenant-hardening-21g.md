@@ -1,6 +1,6 @@
 # Etapa 21G — isolamento SaaS no staging
 
-Estado: correções e ensaio local concluídos; aceite de migration/deploy pendente.
+Estado: correções, reaudit A/B, migration e deploy aceitos em 2026-09-18.
 Escopo exclusivo: Supabase awganmhowivedfocwzjy, stack wacrm_staging.
 Nenhuma criação de produção, alteração de DNS, freeze, Meta externa ou Shodisparo.
 
@@ -115,7 +115,11 @@ Avatar existente preserva <user_uuid>/<arquivo>; membership do profile é metada
 equivalente inequívoca que resolve sua account sem mover bytes.
 GET /api/storage/bucket/path usa JWT/cookie do caller e Storage RLS, nunca admin.
 POST nessa rota emite signed URL de 60s; sender emite 300s após ownership.
-São bearer URLs temporárias, não URLs públicas persistidas; válidas até TTL.
+São bearer URLs com tokens de TTL limitado, não URLs públicas persistidas.
+Expiração do token não garante revogação imediata de conteúdo já servido por CDN
+ou browser; não é possível recolher cópias previamente baixadas. A autorização
+é exigida antes de cada emissão. Ver limitações de cache na documentação
+[Supabase Smart CDN](https://supabase.com/docs/guides/storage/cdn/smart-cdn).
 GET é private/no-store, nosniff e sandbox; tipos ativos são attachment.
 Media Meta legada só é buscada se mensagem ligada à account do caller possuir o ID.
 Não houve transferência/movimentação de objeto nem exposição de nova URL pública.
@@ -123,14 +127,23 @@ Não houve transferência/movimentação de objeto nem exposição de nova URL p
 Avatar antes: 1 objeto, 392255 bytes,
 SHA-256 f90cd9e4738db46573ba438abf4bedc460cea086aea08cf8ad473327aff9b267.
 Antes da correção, endpoint público retornava 200 (falha reproduzida).
+Após tornar o bucket privado, a URL antiga ainda retornou 200 por cache CDN HIT,
+enquanto a origem sem cache já negava acesso. Foi executada UMA invalidação do
+cache CDN exclusivamente desse avatar (DELETE /storage/v1/cdn/avatars/<path>,
+HTTP 200), sem DELETE /object e sem alteração de bytes, path ou metadata.
+Ver [purge CDN cache](https://supabase.com/docs/guides/storage/cdn/purge-cdn-cache).
+Aceite posterior: download autenticado 200; URL pública original 400; 392255 bytes
+e SHA-256 idênticos ao baseline. A referência do profile usa /api/storage/avatars/.
+O script 21g_purge_legacy_avatar_cache.mjs registra a operação já executada;
+não o repetir como rotina nem confundir invalidação de cache com remoção do objeto.
 
 ## Verificação reproduzível
 
 - Vitest: 122 arquivos / 1452 testes PASS; 45 testes unitários novos sobre baseline 1407.
 - Typecheck PASS; lint 0 erros / 40 warnings legados.
-- Build local PASS (aguardar confirmação do comando final no aceite).
+- Build local e Docker remoto PASS; npm audit produção: 0 vulnerabilidades.
 - Scheduler/reconciliation node tests: 18 PASS, sem HTTP real.
-- PostgreSQL nativo 17: 128 observações/assertions com schema/funções reais;
+- PostgreSQL nativo 17: 138 observações/assertions com schema/funções reais;
   todas as falhas 21F reproduzidas e bloqueadas; service_role real BYPASSRLS também
   não consegue vínculos mistos. Transaction ROLLBACK preserva fingerprint das 76
   tabelas históricas do restore. Catálogo baseline functions/policies/FKs sem drift.
@@ -182,6 +195,90 @@ WhatsApp config b43f43efef55d4eb71e57d06cd9758ed.
 
 ## Aceite staging e relatório final
 
-PENDENTE: aplicar migration, confirmar catálogo/ledger/advisors, deploy, health,
-avatar bytes + negação pública, ciclos automáticos idle e fingerprints antes/depois.
+Migration aplicada somente em awganmhowivedfocwzjy. O ledger oficial recebeu
+20260918042320 / saas_tenant_boundaries_and_bootstrap. Timestamp gerado difere do
+filename CLI, mas SQL integral é exatamente igual: MD5 b876e1b89e615c0b5860bff850482270;
+SHA-256 10a4f0bd628a3a4aa3901bb9e9e6f8a142a84aabaa710b6bc365a10f4500f158.
+Não houve repair manual do ledger nem reaplicação de migrations antigas.
+
+Catálogo posterior: 40/40 tabelas públicas com RLS; 9 children com account_id;
+43 FKs composites tenant-scoped (36 novas/substituídas + 7 anteriores).
+authenticated não possui INSERT em profiles; três buckets PRIVATE.
+
+Deploy do código ed9ebd7f62f4b0cd74b09b02ed3ec0f4ef02ff2b, imagem
+wacrm-staging:ed9ebd7; image ID
+sha256:77245e16749c6671db1daada46894a0122f90f4bdbeb9355605a223e8a9863f0.
+App e scheduler 1/1, healthy, restart count 0, mesma imagem verificada no container.
+Scheduler manteve 120000ms; ciclos automáticos 04:23:54.707Z e 04:25:54.707Z:
+HTTP 200, processed/sent/failed/delivery_unknown/errors=0. Nenhum cron manual.
+Smoke anônimo: login 200; account/config/eventos/Storage/conversations exigem auth
+e retornam 401. Nenhum browser ou integração Meta externa foi usado.
+
+Meta events 8 → 8; attributions 2 → 2; pending 0 → 0; sending 0 → 0.
+Fingerprints integrais de events, attributions, Meta config e WhatsApp config
+permaneceram idênticos aos quatro valores do baseline, com a mesma serialização
+md5(jsonb_agg(to_jsonb(row) ORDER BY id)::text). Nenhum evento novo ou token alterado.
+Reaudit nativa repetida após deploy: 138 PASS, restore histórico intacto.
+
+Advisors: nenhum novo RLS-disabled/search_path warning. As funções SECURITY DEFINER
+executáveis são exceções revisadas: membership/peek por anon; sete RPCs anteriores
+e duas novas por authenticated (create_my_account/can_access_tenant_object).
+As novas não concedem EXECUTE a PUBLIC/anon; helpers privados não são expostos.
+automation_pending_executions sem policy browser é deny-by-default intencional.
+vector em public e leaked password protection desabilitada são avisos legados;
+nenhuma mudança de configuração Auth/extensão foi feita. A decisão sobre proteção
+de senhas permanece item da preparação de produção, não falha tenant nova.
+
+As orientações Supabase influenciaram constraints/RLS em camadas, grants mínimos,
+Storage privado e testes nativos com roles reais, além dos mocks do backend.
 Não há autorização para produção, DNS, freeze ou cutover mesmo após GO.
+
+### Relatório final solicitado (47 itens)
+
+1. Cross-account associations: FIXED.
+2. Estratégia: combinação de composite FKs/unique, triggers de tenant imutável e membership, grants e RPCs transacionais.
+3. Tabelas: todas as 40 da matriz acima. Relações composite reforçadas em conversations, contact_notes, contact_tags, contact_custom_values, messages, pipeline_stages, deals, broadcast_recipients, automation_steps, automation_logs, automation_pending_executions, message_reactions, flow_nodes, flow_runs, flow_run_events, notifications, ai_knowledge_chunks, ai_usage_log e meta_conversion_events; proteções Meta anteriores preservadas.
+4. RLS audit: PASS.
+5. RLS/grants corrigidos: notifications, profiles e storage.objects; políticas tenant corretas anteriores preservadas nas demais tabelas.
+6. Backend authorization: PASS nos fluxos auditados e testes controlados.
+7. Endpoints corrigidos: POST /api/account; /api/automations, /api/automations/[id], /api/automations/[id]/duplicate; /api/flows/[id], /api/flows/[id]/activate; POST/DELETE /api/whatsapp/config; PATCH/DELETE /api/whatsapp/templates/[id] e submit; /api/whatsapp/webhook; /api/whatsapp/media/[mediaId]; /api/storage/[bucket]/[...path]; guards compartilhados de send/engines/CAPI e serialização v1. Inventário completo de callers na matriz.
+8. Notification leak: FIXED, inclusive saída de membership e Realtime filtrado.
+9. Account takeover sem profile: FIXED; INSERT direto/forged account/role negados.
+10. Account creation: PASS, operação oficial idempotente e atômica.
+11. Onboarding: PASS; defaults utilizáveis, mappings NULL, nenhuma credencial herdada.
+12. Invitation flow: PASS, conta/role/validade/uso único e concorrência.
+13. Membership roles: PASS; hardening 21B preservado, owner consistente na concorrência.
+14. WhatsApp config isolation: PASS.
+15. phone_number_id uniqueness/resolution: PASS; UNIQUE(account_id) e UNIQUE(phone_number_id); WABA não unique.
+16. Inbound routing: PASS, receiver conhecido obrigatório, sem tenant default.
+17. Status routing: PASS, phone_number_id → account → mensagem filtrada.
+18. Cross-tenant status test: PASS; mesmo external ID em A/B altera somente A.
+19. Outbound resource binding: PASS, fail-closed antes de transporte externo.
+20. Meta tenant isolation: PASS, config/attribution/contact/event/dataset por account.
+21. Scheduler multi-account: PASS, claims independentes/atômicos; falha A não altera B.
+22. Storage buckets: avatars PRIVATE; chat-media PRIVATE; flow-media PRIVATE.
+23. Storage paths tenant-aware: SIM, account-UUID para chat/flow; avatar user UUID → profile.account_id.
+24. Storage RLS: PASS, três buckets cobertos em A/B.
+25. Signed URL authorization: PASS, caller JWT/membership antes da emissão; conhecimento do path não autoriza.
+26. Existing avatar preserved: SIM, mesmo checksum/tamanho; acesso público antigo negado.
+27. Tests novos: 45 unitários; mais 138 observações/assertions nativas e 3 cenários concorrentes, contabilizados separadamente.
+28. Tests total: 1452 Vitest PASS (122 arquivos), 18 Node PASS, 138 nativos PASS e 3 cenários concorrentes PASS. Os 317 anteriores continuam cobertos/passing.
+29. Typecheck: PASS.
+30. Lint: 0 erros / 40 warnings legados.
+31. Build: PASS local e Docker staging.
+32. Migration nova: 20260918004200_saas_tenant_boundaries_and_bootstrap.sql.
+33. Staging migrations: PASS; ledger 20260918042320, SQL integral equivalente.
+34. Staging deploy: ed9ebd7 / wacrm-staging:ed9ebd7; image ID acima.
+35. App: 1/1, healthy, 0 restarts.
+36. Scheduler: 1/1, healthy, 0 restarts, 120s.
+37. Meta events antes/depois: 8 / 8, fingerprint idêntico.
+38. WhatsApp real enviado: NÃO.
+39. POST /events: NÃO.
+40. Tenant A/B reaudit: PASS, banco nativo/RLS/service_role + backend e concorrência, sem dados sintéticos no staging.
+41. Arquitetura multi-tenant: PASS no escopo controlado auditado; um app/múltiplas accounts, um número por account, sem fallback global.
+42. SaaS ready: SIM para os critérios lógicos desta etapa; não equivale a produção criada/aprovada, teste de carga ou garantia absoluta de segurança.
+43. Produção criada: NÃO.
+44. DNS alterado: NÃO.
+45. GO/NO-GO para retomar PREPARAÇÃO de produção: GO, não autorização de deploy/cutover.
+46. Bloqueios multi-tenant reproduzidos restantes: NENHUM. Pendências pré-produção: decisão manual sobre avisos Auth legados, revisão do backup/captura final, aprovações e provisionamento separados da topologia B. Sem freeze agora.
+47. Próxima ação exata: revisar/aceitar este relatório e autorizar uma etapa separada de preparação do Supabase/stack de produção da topologia B; não executar freeze, DNS ou cutover nesta etapa.

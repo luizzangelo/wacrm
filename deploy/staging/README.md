@@ -65,17 +65,16 @@ verify HTTP 200, processed/sent/failed=0, unchanged rows and no sender POST log.
 
 Copy `stack.yml` and `meta-conversions-scheduler.mjs` to `/opt/wacrm-staging/`.
 Back up its previous stack file first. Preserve the dirty application checkout.
-The app image is `wacrm-staging:50f56c5`, including the 20B loss-occurrence dashboard
-and corrected first-response metric (see `docs/dashboard-loss-and-response.md`),
-card reply dots/date-time,
-automatic inbound deals,
-batched Kanban conversation context, the 20A deal lifecycle,
-the 19C CAPI redirect-replay
-fix and 19D read-only event diagnostics (see
-`docs/meta-conversions-observability.md`). The scheduler deliberately keeps
-`wacrm-staging:65c593f` as its Node runtime;
-its script is supplied by the versioned Docker Config, not baked into that
-image. App and scheduler image upgrades are independent and must be explicit.
+The app and scheduler now use `wacrm-staging:ed9ebd7`, accepted in stage 21G.
+It preserves the previous CRM/CAPI features and adds SaaS tenant boundaries,
+atomic onboarding and private Storage. Acceptance, exact image ID, migration
+ledger equivalence and safe rollback constraints are documented in
+`docs/saas-tenant-hardening-21g.md`. The scheduler script remains supplied by
+the versioned Docker Config; its interval remains 120s and claims are unchanged.
+App and scheduler image upgrades are independent and must be explicit.
+The old public avatar CDN cache was invalidated once, without deleting its object.
+Do not routinely rerun `21g_purge_legacy_avatar_cache.mjs`; read-only acceptance
+can be checked with `21g_runtime_check.mjs` inside the existing app container.
 
 On the staging VPS:
 
