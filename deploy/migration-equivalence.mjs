@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Preserve internal bytes. Only delimiters and outer whitespace are removed.
-export function splitSqlStatements(sql) {
+export function inspectSql(sql) {
   if (typeof sql !== 'string') throw new Error('Unavailable SQL');
   const parts = [];
   let start = 0, i = 0, state = '', tag = '', depth = 0, escaped = false;
@@ -55,16 +55,28 @@ export function splitSqlStatements(sql) {
   }
   if (state && state !== 'line') throw new Error('Unterminated SQL lexical construct');
   finish(sql.length);
-  if (!anyMeaningful) throw new Error('Empty or comment-only SQL');
-  return parts;
+  return {
+    statements: parts,
+    kind: anyMeaningful ? 'SQL' : parts.length ? 'COMMENTS_ONLY' : 'EMPTY',
+  };
 }
+export const splitSqlStatements = (sql) => inspectSql(sql).statements;
 export const normalizeSql = (sql) => JSON.stringify(splitSqlStatements(sql));
 export const sqlChecksum = (sql) => createHash('sha256').update(normalizeSql(sql)).digest('hex');
 export function compareMigration(file, sql, ledger) {
   const version = file.split('_')[0];
   const name = file.slice(version.length + 1).replace(/\.sql$/, '');
-  let checksum;
-  try { checksum = sqlChecksum(sql); } catch { return { file, version, result: 'UNKNOWN' }; }
+  let checksum, local;
+  try {
+    local = inspectSql(sql);
+    checksum = sqlChecksum(sql);
+  } catch { return { file, version, result: 'UNKNOWN', reason: 'UNINTERPRETABLE_LOCAL_SQL' }; }
+  // Valid lexical comments are not evidence of an executable migration.
+  // Keep this classification separate from parsing individual ledger entries.
+  if (local.kind !== 'SQL') {
+    return { file, version, checksum, result: 'UNKNOWN', input_kind: local.kind,
+      reason: local.kind === 'EMPTY' ? 'EMPTY_MIGRATION' : 'COMMENTS_ONLY_MIGRATION' };
+  }
   if (!Array.isArray(ledger) || !ledger.every(r => r && typeof r.version === 'string') ||
       new Set(ledger.map(r => r.version)).size !== ledger.length) {
     return { file, version, checksum, result: 'UNKNOWN' };
@@ -72,7 +84,9 @@ export function compareMigration(file, sql, ledger) {
   const rows = ledger.map(row => {
     try {
       if (!Array.isArray(row.statements) || !row.statements.length) throw new Error();
-      const canonical = JSON.stringify(row.statements.flatMap(splitSqlStatements));
+      const entries = row.statements.map(inspectSql);
+      if (!entries.some(entry => entry.kind === 'SQL')) throw new Error();
+      const canonical = JSON.stringify(entries.flatMap(entry => entry.statements));
       return { row, checksum: createHash('sha256').update(canonical).digest('hex') };
     } catch { return { row, checksum: null }; }
   });
