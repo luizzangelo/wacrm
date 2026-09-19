@@ -1,5 +1,13 @@
 # Etapa 21H — produção separada / topologia B
 
+> SUPERADO pela decisão posterior de PRODUÇÃO IN-PLACE em 2026-09-18.
+> Documento histórico, NÃO executar seu plano de provisionamento/cutover.
+> A organização é Shodisparo (`tpweqctwwkzaajmvrqne`); `wacrm` é o projeto
+> `awganmhowivedfocwzjy`, não uma organização. A confusão registrada abaixo foi
+> corrigida pelo usuário. O projeto Shodisparo `zyqbgrrpedzxfcwhlfoa` segue fora
+> de escopo. Nenhum segundo projeto, organização, upgrade ou stack é necessário.
+> Estado vigente e gate de segurança: [produção in-place 21H](production-in-place-21h.md).
+
 Estado: BLOQUEADA antes do provisionamento. Última coleta: 2026-09-18 04:39:35 UTC.
 Este documento é um relatório parcial, não um aceite de infraestrutura pronta.
 

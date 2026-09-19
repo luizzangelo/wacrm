@@ -1,5 +1,10 @@
 # wacrm — CRM Template for WhatsApp
 
+This local fork uses one official production environment at
+`https://crm.luizangelo.com.br`. The legacy Docker stack name `wacrm_staging`
+does not denote a separate staging environment. Current topology, backup,
+deployment and readiness findings: [production runbook 21H](docs/production-in-place-21h.md).
+
 > Self-hostable CRM template for WhatsApp® — shared inbox, contacts,
 > sales pipelines, broadcasts, and no-code automations. Fork it, brand
 > it, host it.

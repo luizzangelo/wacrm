@@ -1,3 +1,5 @@
+# Official WACRM production; staging names are legacy identifiers (21H).
+# Do not rename/redeploy for designation alone. See docs/production-in-place-21h.md.
 version: "3.8"
 
 services:

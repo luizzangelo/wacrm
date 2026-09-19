@@ -1,7 +1,11 @@
-# Staging Meta Conversions scheduler
+# Production Meta Conversions scheduler (legacy staging names)
 
-Staging only: `wacrm_staging`, `crm.luizangelo.com.br`. No production stack,
-enrichment cron, Meta settings or event state changes are part of deployment.
+Despite the historical name `wacrm_staging`, this is the official WACRM production
+infrastructure at `crm.luizangelo.com.br`, using Supabase `awganmhowivedfocwzjy`.
+There is no separate remote WACRM staging, second project, migration or cutover.
+Do not rename services, add a second scheduler or redeploy merely to formalize
+this designation. Current evidence and unresolved readiness findings are in
+[runbook 21H](../../docs/production-in-place-21h.md).
 
 The existing app image also contains Node, so a separate scheduler image is not
 needed. A versioned Docker Config mounts the scheduler; only the existing cron
@@ -29,8 +33,9 @@ deadline in self-hosted Next.js. Database/JSON/CPU overhead is additional.
 `META_CONVERSIONS_CRON_INTERVAL_MS` is a nonsecret scheduler setting. Default:
 120000; minimum: 60000. Only integer decimal strings within Node's timer limit
 (2147483647ms) are accepted; missing/invalid/overflowing values use 120000.
-Staging explicitly sets 120000. Initial production recommendation is also two
-minutes; this file neither deploys nor configures production.
+The existing production scheduler explicitly sets 120000. Historical references
+to staging in paths, Docker Secrets, Configs and image tags are legacy names,
+not runtime test/dev behavior. Promotion in-place does not execute this deploy.
 
 This is a start-to-start target, not 120 seconds after the response and not an
 absolute wall-clock cron. After completion it waits the remaining interval;
@@ -72,11 +77,17 @@ ledger equivalence and safe rollback constraints are documented in
 `docs/saas-tenant-hardening-21g.md`. The scheduler script remains supplied by
 the versioned Docker Config; its interval remains 120s and claims are unchanged.
 App and scheduler image upgrades are independent and must be explicit.
-The old public avatar CDN cache was invalidated once, without deleting its object.
+The old public avatar CDN cache was invalidated once in 21G, without deleting its object.
 Do not routinely rerun `21g_purge_legacy_avatar_cache.mjs`; read-only acceptance
 can be checked with `21g_runtime_check.mjs` inside the existing app container.
+The check now fails on any successful anonymous legacy URL response, including
+CDN cache hits. Stage 21H found a residual cache hit: the prior purge and private
+bucket flags alone do NOT establish revocation at every CDN edge. Do not delete
+the stored avatar or repeatedly purge cache as a routine healthcheck.
+One additional scoped purge in 21H returned HTTP 200; after propagation the exact
+anonymous URL and a nonce URL both returned HTTP 400. Avatar bytes/hash are unchanged.
 
-On the staging VPS:
+For a separately approved future production deployment on the current VPS:
 
 ```sh
 cd /opt/wacrm-staging
@@ -109,4 +120,5 @@ Tests (no network or real secrets):
 
 ```sh
 node --test deploy/staging/meta-conversions-scheduler.test.mjs
+node --test deploy/staging/21g_runtime_check.test.mjs
 ```
