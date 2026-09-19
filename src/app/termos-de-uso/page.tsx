@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { LegalPage, type LegalSection } from '@/components/legal/legal-page';
 
-const SITE_URL = 'https://crm.luizangelo.com.br/termos-de-uso';
+const SITE_URL = 'https://crm.luizangelo.com.br';
 const SUPPORT_EMAIL = 'lacfprojetos@gmail.com';
 
 export const metadata: Metadata = {
