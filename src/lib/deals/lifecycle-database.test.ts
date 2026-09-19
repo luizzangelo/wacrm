@@ -90,6 +90,7 @@ beforeAll(async () => {
   await db.exec(
     readFileSync(resolve('src/lib/deals/lifecycle-schema.fixture.sql'), 'utf8')
   );
+  await db.exec('CREATE ROLE supabase_auth_admin');
   await db.exec(
     readFileSync(
       resolve('supabase/migrations/040_meta_conversions_foundation.sql'),
@@ -117,6 +118,14 @@ beforeAll(async () => {
     readFileSync(
       resolve(
         'supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql'
+      ),
+      'utf8'
+    )
+  );
+  await db.exec(
+    readFileSync(
+      resolve(
+        'supabase/migrations/20260919161755_fix_auth_bootstrap_lost_stage_privilege.sql'
       ),
       'utf8'
     )
