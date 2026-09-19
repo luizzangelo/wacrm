@@ -33,7 +33,7 @@ describe('public legal pages', () => {
     ).toBeTruthy();
     expect(
       screen.getAllByRole('link', {
-        name: 'privacidade@luizangelo.com.br',
+        name: 'lacfprojetos@gmail.com',
       })
     ).not.toHaveLength(0);
     expect(privacyMetadata.alternates?.canonical).toBe(

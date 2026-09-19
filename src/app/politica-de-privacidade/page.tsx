@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { LegalPage, type LegalSection } from '@/components/legal/legal-page';
 
 const SITE_URL = 'https://crm.luizangelo.com.br';
-const PRIVACY_EMAIL = 'privacidade@luizangelo.com.br';
+const PRIVACY_EMAIL = 'lacfprojetos@gmail.com';
 
 export const metadata: Metadata = {
   title: 'Política de Privacidade',
