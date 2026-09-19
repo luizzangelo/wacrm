@@ -8,6 +8,9 @@ import PrivacyPolicyPage, {
 import TermsOfUsePage, {
   metadata as termsMetadata,
 } from './termos-de-uso/page';
+import DataDeletionPage, {
+  metadata as deletionMetadata,
+} from './exclusao-de-dados/page';
 
 describe('public legal pages', () => {
   it('publishes the LGPD and Meta/WhatsApp privacy disclosures', () => {
@@ -87,5 +90,25 @@ describe('public legal pages', () => {
         .getAllByRole('link', { name: 'Política de Privacidade' })[0]
         .getAttribute('href')
     ).toBe('/politica-de-privacidade');
+  });
+
+  it('publishes public Meta-linked data deletion instructions', () => {
+    render(<DataDeletionPage />);
+
+    expect(
+      screen.getByRole('heading', { name: 'Exclusão de Dados', level: 1 })
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('heading', {
+        name: 'Dados vinculados à Meta e ao WhatsApp',
+        level: 2,
+      })
+    ).toBeTruthy();
+    expect(
+      screen.getAllByRole('link', { name: 'lacfprojetos@gmail.com' })
+    ).not.toHaveLength(0);
+    expect(deletionMetadata.alternates?.canonical).toBe(
+      'https://crm.luizangelo.com.br/exclusao-de-dados'
+    );
   });
 });

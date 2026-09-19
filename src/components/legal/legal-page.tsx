@@ -6,6 +6,7 @@ import {
   LockKeyhole,
   MessageSquare,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react';
 
 export type LegalSection = {
@@ -15,7 +16,7 @@ export type LegalSection = {
 };
 
 type LegalPageProps = {
-  documentType: 'privacy' | 'terms';
+  documentType: 'privacy' | 'terms' | 'deletion';
   eyebrow: string;
   title: string;
   description: string;
@@ -26,6 +27,7 @@ type LegalPageProps = {
 const legalLinks = [
   { href: '/politica-de-privacidade', label: 'Política de Privacidade' },
   { href: '/termos-de-uso', label: 'Termos de Uso' },
+  { href: '/exclusao-de-dados', label: 'Exclusão de Dados' },
 ] as const;
 
 export function LegalPage({
@@ -36,7 +38,12 @@ export function LegalPage({
   updatedAt,
   sections,
 }: LegalPageProps) {
-  const DocumentIcon = documentType === 'privacy' ? ShieldCheck : FileText;
+  const DocumentIcon =
+    documentType === 'privacy'
+      ? ShieldCheck
+      : documentType === 'deletion'
+        ? Trash2
+        : FileText;
 
   return (
     <div className="bg-background text-foreground relative min-h-screen overflow-hidden">
@@ -80,7 +87,10 @@ export function LegalPage({
                 aria-current={
                   (documentType === 'privacy' &&
                     link.href === '/politica-de-privacidade') ||
-                  (documentType === 'terms' && link.href === '/termos-de-uso')
+                  (documentType === 'terms' &&
+                    link.href === '/termos-de-uso') ||
+                  (documentType === 'deletion' &&
+                    link.href === '/exclusao-de-dados')
                     ? 'page'
                     : undefined
                 }
