@@ -1,5 +1,9 @@
 # Hardening e prontidão — ETAPA 21B
 
+> EVIDÊNCIA HISTÓRICA. Decisões posteriores de isolamento 21G e produção única
+> 21H não reescrevem esta coleta. Topologia e readiness atuais:
+> [produção in-place 21H](production-in-place-21h.md).
+
 Escopo: repositório WACRM e staging `awganmhowivedfocwzjy`/`wacrm_staging`.
 HEAD inicial `b62dca8392116bf7577a15117f11fa836e8335ee`. Produção não criada nem
 promovida. Nenhuma operação Meta, cron manual, envio WhatsApp, movimento de deal

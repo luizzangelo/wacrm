@@ -1,5 +1,11 @@
 # Etapa 21G — isolamento SaaS no staging
 
+> HISTÓRICO DE ACEITE 21G, preservado. O termo staging tornou-se um nome legado:
+> esta infraestrutura é agora a produção oficial, sem projeto/stack adicional.
+> A revalidação 21H detectou novamente cache público residual do avatar; o PASS
+> de Storage na coleta 21G não substitui a evidência runtime atual.
+> Topologia e gate vigentes: [21H in-place](production-in-place-21h.md).
+
 Estado: correções, reaudit A/B, migration e deploy aceitos em 2026-09-18.
 Escopo exclusivo: Supabase awganmhowivedfocwzjy, stack wacrm_staging.
 Nenhuma criação de produção, alteração de DNS, freeze, Meta externa ou Shodisparo.
