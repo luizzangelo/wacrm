@@ -208,19 +208,20 @@ BEGIN
   END;
 
   INSERT INTO public.deals (
-    id, user_id, account_id, pipeline_id, stage_id, title, meta_attribution_id
+    id, user_id, account_id, pipeline_id, stage_id, contact_id, title,
+    meta_attribution_id
   )
   VALUES
     (
-      v_deal_a, v_owner_a, v_account_a, v_pipeline_a, v_stage_lead,
+      v_deal_a, v_owner_a, v_account_a, v_pipeline_a, v_stage_lead, v_contact_a,
       'Meta Deal A', v_attribution_a
     ),
     (
-      v_deal_a_2, v_owner_a, v_account_a, v_pipeline_a, v_stage_none,
+      v_deal_a_2, v_owner_a, v_account_a, v_pipeline_a, v_stage_none, v_contact_a,
       'Meta Deal A2', v_attribution_a
     ),
     (
-      v_deal_b, v_owner_b, v_account_b, v_pipeline_b, v_stage_b,
+      v_deal_b, v_owner_b, v_account_b, v_pipeline_b, v_stage_b, v_contact_b,
       'Meta Deal B', v_attribution_b
     );
 
@@ -433,6 +434,9 @@ BEGIN
   PERFORM set_config('request.jwt.claim.role', '', TRUE);
 
   -- Deleting mutable CRM entities must not delete Meta audit history.
+  -- Remove the conversation first so its SET NULL reference is resolved before
+  -- the contact cascade reaches the same attribution row through a second FK.
+  DELETE FROM public.conversations WHERE id = v_conversation_a;
   DELETE FROM public.contacts WHERE id = v_contact_a;
   DELETE FROM public.whatsapp_config WHERE id = v_whatsapp_a;
   DELETE FROM public.pipelines WHERE id = v_pipeline_a;

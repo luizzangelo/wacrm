@@ -41,22 +41,22 @@ DECLARE
   v_failed BOOLEAN := FALSE;
 BEGIN
   IF to_regprocedure(
-    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid)'
+    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid,text,text)'
   ) IS NULL THEN
     RAISE EXCEPTION 'atomic deal-stage conversion RPC is missing';
   END IF;
 
   IF has_function_privilege(
     'anon',
-    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid)',
+    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid,text,text)',
     'EXECUTE'
   ) OR has_function_privilege(
     'authenticated',
-    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid)',
+    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid,text,text)',
     'EXECUTE'
   ) OR NOT has_function_privilege(
     'service_role',
-    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid)',
+    'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid,text,text)',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'RPC grants are not service-role-only';
@@ -65,7 +65,7 @@ BEGIN
   IF EXISTS (
     SELECT 1
     FROM pg_proc AS p
-    WHERE p.oid = 'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid)'::regprocedure
+    WHERE p.oid = 'public.move_deal_to_stage_with_conversion_intent(uuid,uuid,uuid,text,text)'::regprocedure
       AND p.prosecdef
   ) THEN
     RAISE EXCEPTION 'RPC unexpectedly uses SECURITY DEFINER';
