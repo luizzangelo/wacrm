@@ -220,6 +220,8 @@ export type ContentType =
   | 'interactive';
 export type MessageStatus =
   'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageSource =
+  'cloud_api' | 'whatsapp_business_app' | 'coexistence_history';
 
 export interface Message {
   id: string;
@@ -237,6 +239,12 @@ export interface Message {
   media_type?: string | null;
   template_name?: string;
   message_id?: string;
+  /**
+   * Transport origin. Imported history and Business App echoes are kept
+   * separate from live Cloud API traffic so they cannot trigger inbound
+   * automations, unread counters, AI replies or conversion side effects.
+   */
+  source?: MessageSource;
   status: MessageStatus;
   created_at: string;
   reply_to_message_id?: string;
