@@ -309,6 +309,30 @@ export interface WhatsAppConfig {
    * inbound attachments expire. Migration 039.
    */
   mirror_inbound_media?: boolean;
+  connection_mode?: 'manual' | 'coexistence';
+  meta_business_id?: string | null;
+  is_on_biz_app?: boolean | null;
+  platform_type?: string | null;
+  token_type?: string | null;
+  token_expires_at?: string | null;
+  onboarding_completed_at?: string | null;
+  subscription_status?: 'unknown' | 'pending' | 'subscribed' | 'failed';
+  app_state_sync_status?:
+    | 'not_requested'
+    | 'requesting'
+    | 'requested'
+    | 'completed'
+    | 'failed'
+    | 'delivery_unknown';
+  history_sync_status?:
+    | 'not_requested'
+    | 'requesting'
+    | 'requested'
+    | 'completed'
+    | 'failed'
+    | 'delivery_unknown';
+  disconnected_at?: string | null;
+  disconnect_reason?: string | null;
 }
 
 // Raw Meta status enum. We persist this verbatim from Meta (sync + webhook)
