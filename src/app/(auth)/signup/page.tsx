@@ -233,6 +233,24 @@ function SignupPageInner() {
             >
               {loading ? 'Criando conta...' : 'Criar conta'}
             </Button>
+
+            <p className="text-muted-foreground text-center text-xs leading-5">
+              Ao criar uma conta, você concorda com os{' '}
+              <Link
+                href="/termos-de-uso"
+                className="text-primary hover:text-primary/80"
+              >
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link
+                href="/politica-de-privacidade"
+                className="text-primary hover:text-primary/80"
+              >
+                Política de Privacidade
+              </Link>
+              .
+            </p>
           </form>
 
           <p className="text-muted-foreground mt-6 text-center text-sm">
