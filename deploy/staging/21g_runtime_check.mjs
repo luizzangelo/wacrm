@@ -17,4 +17,8 @@ const authenticated=await get('/storage/v1/object/authenticated/avatars/'+path);
 assert.equal(authenticated.status,200);
 const bytes=Buffer.from(await authenticated.arrayBuffer());assert.ok(bytes.length>0);
 const publicRead=await get('/storage/v1/object/public/avatars/'+path,false);
-console.log(JSON.stringify({avatar_count:rows.length,avatar_bytes:bytes.length,avatar_sha256:createHash('sha256').update(bytes).digest('hex'),authenticated_http:authenticated.status,anonymous_public_http:publicRead.status,private_reference:url.pathname.startsWith('/api/storage/')}));
+const publicBytes=publicRead.ok?Buffer.from(await publicRead.arrayBuffer()):null;
+const uncachedPublicRead=await get('/storage/v1/object/public/avatars/'+path+'?cacheNonce='+Date.now(),false);
+console.log(JSON.stringify({avatar_count:rows.length,avatar_bytes:bytes.length,avatar_sha256:createHash('sha256').update(bytes).digest('hex'),authenticated_http:authenticated.status,anonymous_public_http:publicRead.status,anonymous_body_matches_avatar:publicBytes?.equals(bytes)??false,anonymous_cache_status:publicRead.headers.get('cf-cache-status'),anonymous_cache_control:publicRead.headers.get('cache-control'),anonymous_cache_age:publicRead.headers.get('age'),anonymous_uncached_http:uncachedPublicRead.status,private_reference:url.pathname.startsWith('/api/storage/')}));
+// A private bucket flag alone does not prove that a legacy cached URL is inaccessible.
+assert.ok(!publicRead.ok && !uncachedPublicRead.ok,'Legacy anonymous URL is still accessible');
