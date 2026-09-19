@@ -13,6 +13,9 @@ services:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       NEXT_PUBLIC_SITE_URL: https://crm.luizangelo.com.br
       NEXT_PUBLIC_APP_LOCALE: ${NEXT_PUBLIC_APP_LOCALE:-en}
+      NEXT_PUBLIC_META_APP_ID: "1661839952034827"
+      NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID: "1449663160367056"
+      META_EMBEDDED_SIGNUP_GRAPH_VERSION: "v26.0"
     command:
       - /bin/sh
       - -ec
@@ -21,12 +24,14 @@ services:
         export ENCRYPTION_KEY="$$(cat /run/secrets/wacrm_staging_encryption_key)"
         export AUTOMATION_CRON_SECRET="$$(cat /run/secrets/wacrm_staging_automation_cron_secret)"
         export META_APP_SECRET="$$(cat /run/secrets/wacrm_staging_meta_app_secret)"
+        export WHATSAPP_WEBHOOK_VERIFY_TOKEN="$$(cat /run/secrets/wacrm_staging_whatsapp_webhook_verify_token)"
         exec node server.js
     secrets:
       - wacrm_staging_supabase_service_role
       - wacrm_staging_encryption_key
       - wacrm_staging_automation_cron_secret
       - wacrm_staging_meta_app_secret
+      - wacrm_staging_whatsapp_webhook_verify_token
     networks:
       - network_public
     healthcheck:
@@ -124,4 +129,6 @@ secrets:
   wacrm_staging_automation_cron_secret:
     external: true
   wacrm_staging_meta_app_secret:
+    external: true
+  wacrm_staging_whatsapp_webhook_verify_token:
     external: true
