@@ -286,6 +286,63 @@ describe('21G: outbound rejects inconsistent privileged resource bindings',()=>{
 });
 
 describe('sendMessageToConversation — template persistence (#483)', () => {
+  it('persists hello_world as an outbound template with the real Meta wamid', async () => {
+    sendTemplateMessage.mockClear();
+    sendTemplateMessage.mockResolvedValueOnce({
+      messageId: 'wamid.real-hello-world',
+    });
+    const captured: CapturedWrites = {};
+
+    const result = await sendMessageToConversation(
+      sendPathDb([], captured),
+      'acct-1',
+      {
+        conversationId: 'cv-1',
+        messageType: 'template',
+        templateName: 'hello_world',
+        templateLanguage: 'en_US',
+        contentText: 'Hello World',
+      }
+    );
+
+    expect(sendTemplateMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateName: 'hello_world',
+        language: 'en_US',
+      })
+    );
+    expect(result.whatsappMessageId).toBe('wamid.real-hello-world');
+    expect(captured.message).toMatchObject({
+      sender_type: 'agent',
+      content_type: 'template',
+      content_text: 'Hello World',
+      template_name: 'hello_world',
+      message_id: 'wamid.real-hello-world',
+      status: 'sent',
+    });
+  });
+
+  it('does not persist a fake hello_world message when Meta rejects it', async () => {
+    sendTemplateMessage.mockClear();
+    sendTemplateMessage.mockRejectedValueOnce(
+      new Error('Meta rejected hello_world')
+    );
+    const captured: CapturedWrites = {};
+
+    await expect(
+      sendMessageToConversation(sendPathDb([], captured), 'acct-1', {
+        conversationId: 'cv-1',
+        messageType: 'template',
+        templateName: 'hello_world',
+        templateLanguage: 'en_US',
+        contentText: 'Hello World',
+      })
+    ).rejects.toMatchObject({ code: 'meta_error', status: 502 });
+
+    expect(captured.message).toBeUndefined();
+    expect(captured.conversation).toBeUndefined();
+  });
+
   it('stores the substituted body when the caller sends no text', async () => {
     const captured: CapturedWrites = {};
     const result = await sendMessageToConversation(
