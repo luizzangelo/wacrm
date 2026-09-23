@@ -33,6 +33,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { SettingsPanelHead } from './settings-panel-head';
 import { WhatsAppEmbeddedSignup } from './whatsapp-embedded-signup';
+import { WhatsAppTestMessage } from './whatsapp-test-message';
 import {
   Accordion,
   AccordionItem,
@@ -553,6 +554,11 @@ export function WhatsAppConfig() {
                 : statusMessage || t('notConnectedDesc')}
             </AlertDescription>
           </Alert>
+
+          <WhatsAppTestMessage
+            connected={connectionStatus === 'connected'}
+            canSend={canEditSettings}
+          />
 
           {/* Registration Status — the "is it actually live?" check.
             Credentials being valid is necessary but not sufficient;
