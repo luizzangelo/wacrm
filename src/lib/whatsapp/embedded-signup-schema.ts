@@ -1,5 +1,5 @@
 const ID = /^\d{5,30}$/;
-const CODE = /^[A-Za-z0-9._~-]{8,4096}$/;
+const MAX_AUTHORIZATION_CODE_LENGTH = 4096;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -21,6 +21,14 @@ export type EmbeddedSignupRequest =
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isAuthorizationCode(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_AUTHORIZATION_CODE_LENGTH
+  );
 }
 
 export function parseEmbeddedSignupRequest(
@@ -62,8 +70,7 @@ export function parseEmbeddedSignupRequest(
           'business_id',
         ].includes(key)
     ) ||
-    typeof value.code !== 'string' ||
-    !CODE.test(value.code) ||
+    !isAuthorizationCode(value.code) ||
     (value.flow_mode !== 'standard' && value.flow_mode !== 'coexistence') ||
     typeof value.waba_id !== 'string' ||
     !ID.test(value.waba_id) ||

@@ -183,6 +183,31 @@ describe('POST Embedded Signup completion', () => {
     }
   );
 
+  it('passes an opaque authorization code unchanged and never logs it', async () => {
+    const code = "opaque/AZaz09_-.~+%=?:@!$&'()*;,=[]{}|\\ marker";
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    h.exchange.mockRejectedValueOnce(
+      new EmbeddedSignupMetaError('exchange_rejected', 400, 100, 36008)
+    );
+
+    try {
+      const response = await POST(
+        request({
+          kind: 'complete',
+          code,
+          flow_mode: 'coexistence',
+          waba_id: '2295585011204142',
+        })
+      );
+
+      expect(response.status).toBe(400);
+      expect(h.exchange).toHaveBeenCalledWith(expect.anything(), code);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(code);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('connects one validated coexistence phone without legacy registration', async () => {
     const response = await POST(
       request({

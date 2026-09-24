@@ -77,13 +77,17 @@ describe('Embedded Signup configuration', () => {
 });
 
 describe('Embedded Signup request schema', () => {
+  const baseCompletion = {
+    kind: 'complete',
+    flow_mode: 'coexistence',
+    waba_id: '2295585011204142',
+  } as const;
+
   it('accepts a completion without phone_number_id', () => {
     expect(
       parseEmbeddedSignupRequest({
-        kind: 'complete',
+        ...baseCompletion,
         code: 'authorization-code-123',
-        flow_mode: 'coexistence',
-        waba_id: '2295585011204142',
       })
     ).toEqual({
       kind: 'complete',
@@ -95,7 +99,46 @@ describe('Embedded Signup request schema', () => {
     });
   });
 
-  it('rejects unknown fields, malformed ids and short codes', () => {
+  it('accepts varied opaque authorization codes without modifying them', () => {
+    const codes = [
+      'lettersAZaz',
+      'numbers0123456789',
+      'underscore_hyphen-point.~',
+      'url/safe+opaque=code%2Fvalue?x:y@z',
+      "other !$&'()*;,=[]{}|\\ characters",
+    ];
+
+    for (const code of codes) {
+      const parsed = parseEmbeddedSignupRequest({
+        ...baseCompletion,
+        code,
+      });
+      expect(parsed).toMatchObject({ code });
+    }
+  });
+
+  it('rejects empty, oversized and non-string authorization codes', () => {
+    for (const code of ['', 'x'.repeat(4097), 123, null, {}]) {
+      expect(
+        parseEmbeddedSignupRequest({
+          ...baseCompletion,
+          code,
+        })
+      ).toBeNull();
+    }
+  });
+
+  it('accepts authorization codes at the defensive size limit', () => {
+    const code = 'x'.repeat(4096);
+    expect(
+      parseEmbeddedSignupRequest({
+        ...baseCompletion,
+        code,
+      })
+    ).toMatchObject({ code });
+  });
+
+  it('rejects unknown fields and malformed ids', () => {
     expect(
       parseEmbeddedSignupRequest({
         kind: 'complete',
