@@ -18,10 +18,9 @@ Variáveis públicas de build/runtime:
 - `NEXT_PUBLIC_META_APP_ID`: App ID da Meta;
 - `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID`: configuração do Embedded
   Signup;
-- `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI`: URI HTTPS canônica usada
-  tanto em `FB.login` quanto na troca server-side do authorization code. A
-  igualdade inclui path e trailing slash; produção usa
-  `https://crm.luizangelo.com.br/`.
+- `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI`: URI HTTPS canônica mantida
+  na configuração do ambiente e na lista de OAuth Redirect URIs da Meta. O
+  fluxo via JavaScript SDK não a envia em `FB.login`.
 
 Variáveis somente do servidor:
 
@@ -42,6 +41,7 @@ Next.js.
 2. O browser carrega uma única instância do SDK oficial e chama `FB.login` com
    `response_type: "code"`, `override_default_response_type: true`,
    `featureType: "whatsapp_business_app_onboarding"` e Session Info v3.
+   Assim como o sample oficial da Meta, a chamada não força `redirect_uri`.
 3. O listener aceita `postMessage` somente de origens Facebook conhecidas e
    interpreta `FINISH`, `FINISH_ONLY_WABA`,
    `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, cancel e error. O
@@ -51,8 +51,11 @@ Next.js.
    envia a `POST /api/whatsapp/embedded-signup/complete`.
 5. O backend exige sessão, role admin, same-origin e rate limit. A account vem
    exclusivamente da sessão; IDs do browser nunca concedem autorização.
-6. O backend troca o code uma única vez, valida o App ID, scopes, acesso
-   granular à WABA e descobre os números pela Graph API.
+6. O backend troca o code uma única vez usando `client_id`, `client_secret`,
+   `code` e `redirect_uri=` vazio, exatamente como o `getToken()` do sample
+   oficial da Meta, onde `publicConfig.redirectUri` é definido como `''`;
+   depois valida o App ID, scopes, acesso granular à WABA e descobre os números
+   pela Graph API.
 7. No modo coexistência, apenas números com `is_on_biz_app=true` e
    `platform_type=CLOUD_API` são elegíveis. No modo standard, números do
    WhatsApp Business App não são aceitos. Múltiplos números sempre geram uma

@@ -90,9 +90,11 @@ export async function exchangeAuthorizationCode(
     `https://graph.facebook.com/${config.graphVersion}/oauth/access_token`
   );
   url.searchParams.set('client_id', config.appId);
+  // Meta's Tech Provider sample deliberately uses an empty redirect URI for
+  // authorization codes returned by Embedded Signup through FB.login.
+  url.searchParams.set('redirect_uri', '');
   url.searchParams.set('client_secret', config.appSecret);
   url.searchParams.set('code', code);
-  url.searchParams.set('redirect_uri', config.redirectUri);
 
   const response = await graphFetch(
     url.toString(),

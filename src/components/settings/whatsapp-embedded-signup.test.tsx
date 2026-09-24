@@ -65,7 +65,6 @@ describe('WhatsApp Embedded Signup UI', () => {
       config_id: '1449663160367056',
       response_type: 'code',
       override_default_response_type: true,
-      redirect_uri: 'https://crm.luizangelo.com.br/',
       extras: {
         setup: {},
         featureType: 'whatsapp_business_app_onboarding',

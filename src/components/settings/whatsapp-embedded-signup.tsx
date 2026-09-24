@@ -27,8 +27,6 @@ import {
 
 const APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? '';
 const CONFIG_ID = process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID ?? '';
-const REDIRECT_URI =
-  process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI ?? '';
 const FLOW_TIMEOUT_MS = 2 * 60_000;
 
 type Phase =
@@ -200,7 +198,7 @@ export function WhatsAppEmbeddedSignup({
   }, [clearFlowTimeout, code, session, finishRequest]);
 
   function connect() {
-    if (!window.FB || !sdkReady || !APP_ID || !CONFIG_ID || !REDIRECT_URI) {
+    if (!window.FB || !sdkReady || !APP_ID || !CONFIG_ID) {
       toast.error('Embedded Signup não está configurado neste ambiente.');
       return;
     }
@@ -234,7 +232,6 @@ export function WhatsAppEmbeddedSignup({
         config_id: CONFIG_ID,
         response_type: 'code',
         override_default_response_type: true,
-        redirect_uri: REDIRECT_URI,
         extras: {
           setup: {},
           featureType: 'whatsapp_business_app_onboarding',
@@ -471,8 +468,7 @@ export function WhatsAppEmbeddedSignup({
                   busy ||
                   !sdkReady ||
                   !APP_ID ||
-                  !CONFIG_ID ||
-                  !REDIRECT_URI
+                  !CONFIG_ID
                 }
               >
                 {busy && <Loader2 className="size-4 animate-spin" />}
@@ -491,7 +487,7 @@ export function WhatsAppEmbeddedSignup({
               </Button>
             )}
           </div>
-          {(!APP_ID || !CONFIG_ID || !REDIRECT_URI) && (
+          {(!APP_ID || !CONFIG_ID) && (
             <p className="text-xs text-amber-600">
               Embedded Signup indisponível: configuração pública ausente neste
               build.

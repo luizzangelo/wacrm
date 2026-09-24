@@ -20,7 +20,7 @@ const config: EmbeddedSignupServerConfig = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Embedded Signup Meta client', () => {
-  it('exchanges the one-time code once and never exposes it in returned data', async () => {
+  it('matches the official Meta sample token exchange request exactly', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -37,10 +37,18 @@ describe('Embedded Signup Meta client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'GET' });
     const requestUrl = new URL(String(fetchMock.mock.calls[0][0]));
-    expect(requestUrl.searchParams.get('redirect_uri')).toBe(
-      'https://crm.luizangelo.com.br/'
-    );
+    expect(requestUrl.pathname).toBe('/v26.0/oauth/access_token');
+    expect([...requestUrl.searchParams.keys()]).toEqual([
+      'client_id',
+      'redirect_uri',
+      'client_secret',
+      'code',
+    ]);
+    expect(requestUrl.searchParams.get('client_id')).toBe(config.appId);
+    expect(requestUrl.searchParams.get('client_secret')).toBe(config.appSecret);
     expect(requestUrl.searchParams.get('code')).toBe('single-use-code');
+    expect(requestUrl.searchParams.get('redirect_uri')).toBe('');
+    expect(requestUrl.toString()).not.toContain(config.redirectUri);
   });
 
   it('surfaces Meta 100/36008 without retrying or leaking response text', async () => {
