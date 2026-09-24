@@ -10,6 +10,7 @@ const original = {
   configId: process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID,
   secret: process.env.META_APP_SECRET,
   version: process.env.META_EMBEDDED_SIGNUP_GRAPH_VERSION,
+  redirectUri: process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI,
 };
 
 afterEach(() => {
@@ -17,6 +18,8 @@ afterEach(() => {
   process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID = original.configId;
   process.env.META_APP_SECRET = original.secret;
   process.env.META_EMBEDDED_SIGNUP_GRAPH_VERSION = original.version;
+  process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI =
+    original.redirectUri;
 });
 
 describe('Embedded Signup configuration', () => {
@@ -38,16 +41,38 @@ describe('Embedded Signup configuration', () => {
     process.env.NEXT_PUBLIC_META_APP_ID = '1661839952034827';
     process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID = '1449663160367056';
     process.env.META_APP_SECRET = 'server-only-secret';
+    process.env.META_EMBEDDED_SIGNUP_GRAPH_VERSION = 'v26.0';
     process.env.META_EMBEDDED_SIGNUP_GRAPH_VERSION = '26.0';
+    process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI =
+      'https://crm.luizangelo.com.br/';
     expect(getEmbeddedSignupPublicConfig()).toEqual({
       appId: '1661839952034827',
       configId: '1449663160367056',
       graphVersion: 'v26.0',
+      redirectUri: 'https://crm.luizangelo.com.br/',
     });
     expect(getEmbeddedSignupServerConfig().appSecret).toBe(
       'server-only-secret'
     );
     expect(getEmbeddedSignupPublicConfig()).not.toHaveProperty('appSecret');
+  });
+
+  it('requires an exact HTTPS origin root with a trailing slash', () => {
+    process.env.NEXT_PUBLIC_META_APP_ID = '1661839952034827';
+    process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID = '1449663160367056';
+    process.env.META_APP_SECRET = 'server-only-secret';
+    process.env.META_EMBEDDED_SIGNUP_GRAPH_VERSION = 'v26.0';
+    process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI =
+      'http://crm.luizangelo.com.br/';
+    expect(() => getEmbeddedSignupServerConfig()).toThrow(
+      'NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI'
+    );
+
+    process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI =
+      'https://crm.luizangelo.com.br';
+    expect(getEmbeddedSignupServerConfig().redirectUri).toBe(
+      'https://crm.luizangelo.com.br/'
+    );
   });
 });
 
@@ -57,11 +82,13 @@ describe('Embedded Signup request schema', () => {
       parseEmbeddedSignupRequest({
         kind: 'complete',
         code: 'authorization-code-123',
+        flow_mode: 'coexistence',
         waba_id: '2295585011204142',
       })
     ).toEqual({
       kind: 'complete',
       code: 'authorization-code-123',
+      flowMode: 'coexistence',
       wabaId: '2295585011204142',
       phoneNumberId: null,
       businessId: null,
@@ -75,6 +102,16 @@ describe('Embedded Signup request schema', () => {
         code: 'short',
         waba_id: 'not-an-id',
         account_id: 'forged',
+      })
+    ).toBeNull();
+
+    expect(
+      parseEmbeddedSignupRequest({
+        kind: 'complete',
+        code: 'authorization-code-123',
+        flow_mode: 'standard',
+        waba_id: '2295585011204142',
+        redirect_uri: 'https://attacker.example/',
       })
     ).toBeNull();
   });

@@ -51,10 +51,25 @@ describe('Embedded Signup browser boundary', () => {
       )
     ).toEqual({
       kind: 'finish',
+      event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+      flowMode: 'coexistence',
       wabaId: '2295585011204142',
       phoneNumberId: null,
       businessId: null,
     });
+  });
+
+  it.each([
+    ['FINISH', 'standard'],
+    ['FINISH_ONLY_WABA', 'standard'],
+  ] as const)('maps %s to the standard flow', (event, flowMode) => {
+    expect(
+      parseEmbeddedSignupMessage('https://www.facebook.com', {
+        type: 'WA_EMBEDDED_SIGNUP',
+        event,
+        data: { waba_id: '2295585011204142' },
+      })
+    ).toMatchObject({ kind: 'finish', event, flowMode });
   });
 
   it.each(['CANCEL', 'ERROR'] as const)(

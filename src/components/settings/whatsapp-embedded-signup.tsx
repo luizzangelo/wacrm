@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Card,
   CardContent,
@@ -26,14 +27,18 @@ import {
 
 const APP_ID = process.env.NEXT_PUBLIC_META_APP_ID ?? '';
 const CONFIG_ID = process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID ?? '';
+const REDIRECT_URI =
+  process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI ?? '';
 const FLOW_TIMEOUT_MS = 2 * 60_000;
 
 type Phase =
   | 'idle'
   | 'opening'
   | 'waiting'
-  | 'validating'
+  | 'finalizing'
   | 'selecting'
+  | 'registration'
+  | 'needs_phone'
   | 'connected'
   | 'error';
 
@@ -77,6 +82,10 @@ export function WhatsAppEmbeddedSignup({
     null
   );
   const [choices, setChoices] = useState<PhoneChoice[]>([]);
+  const [registrationPhoneId, setRegistrationPhoneId] = useState<string | null>(
+    null
+  );
+  const [pin, setPin] = useState('');
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completingRef = useRef(false);
 
@@ -95,7 +104,7 @@ export function WhatsAppEmbeddedSignup({
       if (!parsed) return;
       if (parsed.kind === 'finish') {
         setSession(parsed);
-        setPhase('validating');
+        setPhase('waiting');
       } else if (parsed.kind === 'cancel') {
         clearFlowTimeout();
         setPhase('idle');
@@ -124,6 +133,7 @@ export function WhatsAppEmbeddedSignup({
       if (!response.ok)
         throw new Error(String(result.error ?? 'connection_failed'));
       if (result.requires_phone_selection === true) {
+        clearFlowTimeout();
         const phoneNumbers = Array.isArray(result.phone_numbers)
           ? (result.phone_numbers as PhoneChoice[])
           : [];
@@ -132,12 +142,30 @@ export function WhatsAppEmbeddedSignup({
         setPhase('selecting');
         return;
       }
+      if (result.requires_registration_pin === true) {
+        clearFlowTimeout();
+        setSelectionSessionId(String(result.selection_session_id ?? ''));
+        setRegistrationPhoneId(String(result.phone_number_id ?? ''));
+        setPin('');
+        setPhase('registration');
+        return;
+      }
+      if (result.requires_phone_number === true) {
+        clearFlowTimeout();
+        setPhase('needs_phone');
+        toast.info(
+          'Conta do WhatsApp Business criada. Selecione ou adicione um número para concluir a conexão.'
+        );
+        return;
+      }
       clearFlowTimeout();
       setPhase('connected');
       setCode(null);
       setSession(null);
       setChoices([]);
       setSelectionSessionId(null);
+      setRegistrationPhoneId(null);
+      setPin('');
       toast.success('WhatsApp Business conectado ao WACRM.');
       await onChanged();
     },
@@ -147,15 +175,18 @@ export function WhatsAppEmbeddedSignup({
   useEffect(() => {
     if (!code || !session || completingRef.current) return;
     completingRef.current = true;
-    setPhase('validating');
+    clearFlowTimeout();
+    setPhase('finalizing');
     void finishRequest({
       kind: 'complete',
       code,
+      flow_mode: session.flowMode,
       waba_id: session.wabaId,
       phone_number_id: session.phoneNumberId,
       business_id: session.businessId,
     })
       .catch((error) => {
+        clearFlowTimeout();
         setPhase('error');
         toast.error(
           error instanceof Error && error.message === 'exchange_outcome_unknown'
@@ -166,10 +197,10 @@ export function WhatsAppEmbeddedSignup({
       .finally(() => {
         completingRef.current = false;
       });
-  }, [code, session, finishRequest]);
+  }, [clearFlowTimeout, code, session, finishRequest]);
 
   function connect() {
-    if (!window.FB || !sdkReady || !APP_ID || !CONFIG_ID) {
+    if (!window.FB || !sdkReady || !APP_ID || !CONFIG_ID || !REDIRECT_URI) {
       toast.error('Embedded Signup não está configurado neste ambiente.');
       return;
     }
@@ -178,6 +209,8 @@ export function WhatsAppEmbeddedSignup({
     setSession(null);
     setChoices([]);
     setSelectionSessionId(null);
+    setRegistrationPhoneId(null);
+    setPin('');
     setPhase('opening');
     timeoutRef.current = setTimeout(() => {
       setPhase('error');
@@ -201,6 +234,7 @@ export function WhatsAppEmbeddedSignup({
         config_id: CONFIG_ID,
         response_type: 'code',
         override_default_response_type: true,
+        redirect_uri: REDIRECT_URI,
         extras: {
           setup: {},
           featureType: 'whatsapp_business_app_onboarding',
@@ -212,7 +246,7 @@ export function WhatsAppEmbeddedSignup({
 
   async function selectPhone(phoneNumberId: string) {
     if (!selectionSessionId) return;
-    setPhase('validating');
+    setPhase('finalizing');
     try {
       await finishRequest({
         kind: 'select',
@@ -225,6 +259,29 @@ export function WhatsAppEmbeddedSignup({
     }
   }
 
+  async function registerStandardPhone() {
+    if (!selectionSessionId || !registrationPhoneId || !/^\d{6}$/.test(pin)) {
+      toast.error('Informe o PIN de 6 dígitos da verificação em duas etapas.');
+      return;
+    }
+    setPhase('finalizing');
+    try {
+      await finishRequest({
+        kind: 'select',
+        session_id: selectionSessionId,
+        phone_number_id: registrationPhoneId,
+        pin,
+      });
+    } catch (error) {
+      setPhase('registration');
+      toast.error(
+        error instanceof Error && error.message === 'registration_failed'
+          ? 'A Meta recusou o registro do número. Confira o PIN e tente novamente.'
+          : 'Não foi possível registrar o número selecionado.'
+      );
+    }
+  }
+
   async function disconnect() {
     if (
       !confirm(
@@ -233,7 +290,7 @@ export function WhatsAppEmbeddedSignup({
     ) {
       return;
     }
-    setPhase('validating');
+    setPhase('finalizing');
     try {
       const response = await fetch('/api/whatsapp/embedded-signup/disconnect', {
         method: 'POST',
@@ -252,13 +309,13 @@ export function WhatsAppEmbeddedSignup({
     }
   }
 
-  const busy = ['opening', 'waiting', 'validating'].includes(phase);
+  const busy = ['opening', 'waiting', 'finalizing'].includes(phase);
   const phaseText =
     phase === 'opening'
       ? 'Abrindo Meta...'
       : phase === 'waiting'
         ? 'Aguardando autorização...'
-        : phase === 'validating'
+        : phase === 'finalizing'
           ? 'Validando conta, conectando número e sincronizando...'
           : null;
 
@@ -313,7 +370,9 @@ export function WhatsAppEmbeddedSignup({
                 <span className="text-muted-foreground">Modo:</span>{' '}
                 {connectionMode === 'coexistence'
                   ? 'WhatsApp Business + WACRM'
-                  : 'Cloud API manual'}
+                  : connectionMode === 'standard'
+                    ? 'Cloud API via Meta'
+                    : 'Cloud API manual'}
               </div>
               <div>
                 <span className="text-muted-foreground">Status:</span>{' '}
@@ -355,6 +414,47 @@ export function WhatsAppEmbeddedSignup({
             </div>
           )}
 
+          {phase === 'registration' && (
+            <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+              <div>
+                <p className="text-sm font-medium">
+                  Concluir registro do número
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Informe o PIN de 6 dígitos da verificação em duas etapas. O
+                  PIN é enviado diretamente à Meta e não é armazenado.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={6}
+                  value={pin}
+                  onChange={(event) =>
+                    setPin(event.target.value.replace(/\D/g, '').slice(0, 6))
+                  }
+                  aria-label="PIN de 6 dígitos"
+                />
+                <Button
+                  type="button"
+                  onClick={() => void registerStandardPhone()}
+                  disabled={!/^\d{6}$/.test(pin)}
+                >
+                  Concluir
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {phase === 'needs_phone' && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+              Conta do WhatsApp Business criada. Selecione ou adicione um número
+              na Meta e inicie a conexão novamente para concluir.
+            </div>
+          )}
+
           {phaseText && (
             <p className="text-muted-foreground flex items-center gap-2 text-sm">
               <Loader2 className="size-4 animate-spin" /> {phaseText}
@@ -367,7 +467,12 @@ export function WhatsAppEmbeddedSignup({
                 type="button"
                 onClick={connect}
                 disabled={
-                  !canEdit || busy || !sdkReady || !APP_ID || !CONFIG_ID
+                  !canEdit ||
+                  busy ||
+                  !sdkReady ||
+                  !APP_ID ||
+                  !CONFIG_ID ||
+                  !REDIRECT_URI
                 }
               >
                 {busy && <Loader2 className="size-4 animate-spin" />}
@@ -386,7 +491,7 @@ export function WhatsAppEmbeddedSignup({
               </Button>
             )}
           </div>
-          {(!APP_ID || !CONFIG_ID) && (
+          {(!APP_ID || !CONFIG_ID || !REDIRECT_URI) && (
             <p className="text-xs text-amber-600">
               Embedded Signup indisponível: configuração pública ausente neste
               build.

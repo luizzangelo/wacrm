@@ -5,6 +5,7 @@ export interface EmbeddedSignupPublicConfig {
   appId: string;
   configId: string;
   graphVersion: string;
+  redirectUri: string;
 }
 
 export interface EmbeddedSignupServerConfig extends EmbeddedSignupPublicConfig {
@@ -30,6 +31,31 @@ function requireMetaId(name: string, value: string | undefined): string {
   return normalized;
 }
 
+function requireRedirectUri(value: string | undefined): string {
+  const normalized = value?.trim() ?? '';
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error(
+      'Missing or invalid NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI'
+    );
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== '/'
+  ) {
+    throw new Error(
+      'Missing or invalid NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI'
+    );
+  }
+  return url.toString();
+}
+
 export function getEmbeddedSignupPublicConfig(): EmbeddedSignupPublicConfig {
   return {
     appId: requireMetaId(
@@ -42,6 +68,9 @@ export function getEmbeddedSignupPublicConfig(): EmbeddedSignupPublicConfig {
     ),
     graphVersion: normalizeGraphVersion(
       process.env.META_EMBEDDED_SIGNUP_GRAPH_VERSION
+    ),
+    redirectUri: requireRedirectUri(
+      process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI
     ),
   };
 }

@@ -7,11 +7,17 @@ export type EmbeddedSignupRequest =
   | {
       kind: 'complete';
       code: string;
+      flowMode: 'standard' | 'coexistence';
       wabaId: string;
       phoneNumberId: string | null;
       businessId: string | null;
     }
-  | { kind: 'select'; sessionId: string; phoneNumberId: string };
+  | {
+      kind: 'select';
+      sessionId: string;
+      phoneNumberId: string;
+      pin: string | null;
+    };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -24,12 +30,15 @@ export function parseEmbeddedSignupRequest(
   if (value.kind === 'select') {
     if (
       Object.keys(value).some(
-        (key) => !['kind', 'session_id', 'phone_number_id'].includes(key)
+        (key) => !['kind', 'session_id', 'phone_number_id', 'pin'].includes(key)
       ) ||
       typeof value.session_id !== 'string' ||
       !UUID.test(value.session_id) ||
       typeof value.phone_number_id !== 'string' ||
-      !ID.test(value.phone_number_id)
+      !ID.test(value.phone_number_id) ||
+      (value.pin !== undefined &&
+        value.pin !== null &&
+        (typeof value.pin !== 'string' || !/^\d{6}$/.test(value.pin)))
     ) {
       return null;
     }
@@ -37,18 +46,25 @@ export function parseEmbeddedSignupRequest(
       kind: 'select',
       sessionId: value.session_id,
       phoneNumberId: value.phone_number_id,
+      pin: typeof value.pin === 'string' ? value.pin : null,
     };
   }
   if (
     value.kind !== 'complete' ||
     Object.keys(value).some(
       (key) =>
-        !['kind', 'code', 'waba_id', 'phone_number_id', 'business_id'].includes(
-          key
-        )
+        ![
+          'kind',
+          'code',
+          'flow_mode',
+          'waba_id',
+          'phone_number_id',
+          'business_id',
+        ].includes(key)
     ) ||
     typeof value.code !== 'string' ||
     !CODE.test(value.code) ||
+    (value.flow_mode !== 'standard' && value.flow_mode !== 'coexistence') ||
     typeof value.waba_id !== 'string' ||
     !ID.test(value.waba_id) ||
     (value.phone_number_id !== undefined &&
@@ -64,6 +80,7 @@ export function parseEmbeddedSignupRequest(
   return {
     kind: 'complete',
     code: value.code,
+    flowMode: value.flow_mode,
     wabaId: value.waba_id,
     phoneNumberId:
       typeof value.phone_number_id === 'string' ? value.phone_number_id : null,

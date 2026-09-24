@@ -309,7 +309,7 @@ export interface WhatsAppConfig {
    * inbound attachments expire. Migration 039.
    */
   mirror_inbound_media?: boolean;
-  connection_mode?: 'manual' | 'coexistence';
+  connection_mode?: 'manual' | 'standard' | 'coexistence';
   meta_business_id?: string | null;
   is_on_biz_app?: boolean | null;
   platform_type?: string | null;

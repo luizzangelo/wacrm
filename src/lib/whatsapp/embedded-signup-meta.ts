@@ -20,6 +20,7 @@ export class EmbeddedSignupMetaError extends Error {
       | 'invalid_waba'
       | 'phone_discovery_failed'
       | 'invalid_phone'
+      | 'registration_failed'
       | 'subscription_failed'
       | 'subscription_not_confirmed'
       | 'sync_failed'
@@ -91,6 +92,7 @@ export async function exchangeAuthorizationCode(
   url.searchParams.set('client_id', config.appId);
   url.searchParams.set('client_secret', config.appSecret);
   url.searchParams.set('code', code);
+  url.searchParams.set('redirect_uri', config.redirectUri);
 
   const response = await graphFetch(
     url.toString(),

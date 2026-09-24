@@ -9,6 +9,12 @@ const migration = readFileSync(
   ),
   'utf8'
 );
+const standardMigration = readFileSync(
+  resolve(
+    'supabase/migrations/20260924170000_embedded_signup_standard_finalization.sql'
+  ),
+  'utf8'
+);
 
 const ACCOUNT = '00000000-0000-4000-8000-000000000001';
 const USER = '10000000-0000-4000-8000-000000000001';
@@ -54,6 +60,7 @@ beforeAll(async () => {
       VALUES ('${CONVERSATION}','wamid-existing');
   `);
   await db.exec(migration);
+  await db.exec(standardMigration);
 }, 30_000);
 
 afterAll(async () => {
@@ -79,6 +86,9 @@ describe('Embedded Signup + Coexistence migration', () => {
 
   it('accepts only known modes, sync states and message origins', async () => {
     await expect(
+      db.exec("UPDATE whatsapp_config SET connection_mode='standard'")
+    ).resolves.toBeDefined();
+    await expect(
       db.exec("UPDATE whatsapp_config SET connection_mode='takeover'")
     ).rejects.toMatchObject({ code: '23514' });
     await expect(
@@ -86,6 +96,24 @@ describe('Embedded Signup + Coexistence migration', () => {
     ).rejects.toMatchObject({ code: '23514' });
     await expect(
       db.exec("UPDATE messages SET source='webhook_unknown'")
+    ).rejects.toMatchObject({ code: '23514' });
+  });
+
+  it('persists a constrained server-side flow mode for pending sessions', async () => {
+    const row = (
+      await db.query<{ flow_mode: string }>(`
+        INSERT INTO whatsapp_embedded_signup_sessions(
+          account_id,user_id,encrypted_access_token,waba_id,candidates,expires_at
+        ) VALUES (
+          '${ACCOUNT}','${USER}','ciphertext','waba-2','[]',NOW()+INTERVAL '10 minutes'
+        ) RETURNING flow_mode
+      `)
+    ).rows[0];
+    expect(row.flow_mode).toBe('coexistence');
+    await expect(
+      db.exec(
+        "UPDATE whatsapp_embedded_signup_sessions SET flow_mode='unknown'"
+      )
     ).rejects.toMatchObject({ code: '23514' });
   });
 
@@ -121,6 +149,7 @@ describe('Embedded Signup + Coexistence migration', () => {
 
   it('is replay-safe', async () => {
     await expect(db.exec(migration)).resolves.toBeDefined();
+    await expect(db.exec(standardMigration)).resolves.toBeDefined();
     expect(
       (
         await db.query<{ count: number }>(`

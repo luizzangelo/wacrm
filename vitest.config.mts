@@ -17,6 +17,8 @@ export default defineConfig({
       META_APP_SECRET: 'test-meta-app-secret',
       NEXT_PUBLIC_META_APP_ID: '1661839952034827',
       NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID: '1449663160367056',
+      NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI:
+        'https://crm.luizangelo.com.br/',
     },
     clearMocks: true,
   },

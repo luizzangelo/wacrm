@@ -14,29 +14,58 @@ const config: EmbeddedSignupServerConfig = {
   configId: '1449663160367056',
   graphVersion: 'v26.0',
   appSecret: 'test-secret',
+  redirectUri: 'https://crm.luizangelo.com.br/',
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Embedded Signup Meta client', () => {
   it('exchanges the one-time code once and never exposes it in returned data', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            access_token: 'business-token',
-            token_type: 'bearer',
-            expires_in: 60,
-          }),
-          { status: 200 }
-        )
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: 'business-token',
+          token_type: 'bearer',
+          expires_in: 60,
+        }),
+        { status: 200 }
+      )
+    );
     vi.stubGlobal('fetch', fetchMock);
     const result = await exchangeAuthorizationCode(config, 'single-use-code');
     expect(result.accessToken).toBe('business-token');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'GET' });
+    const requestUrl = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(requestUrl.searchParams.get('redirect_uri')).toBe(
+      'https://crm.luizangelo.com.br/'
+    );
+    expect(requestUrl.searchParams.get('code')).toBe('single-use-code');
+  });
+
+  it('surfaces Meta 100/36008 without retrying or leaking response text', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 100,
+            error_subcode: 36008,
+            message: 'sensitive provider detail',
+          },
+        }),
+        { status: 400 }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      exchangeAuthorizationCode(config, 'single-use-code')
+    ).rejects.toMatchObject({
+      reason: 'exchange_rejected',
+      metaCode: 100,
+      metaSubcode: 36008,
+      message: 'exchange_rejected',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('classifies an ambiguous exchange and does not retry', async () => {
@@ -131,13 +160,11 @@ describe('Embedded Signup Meta client', () => {
   });
 
   it('requests each documented coexistence sync without retrying', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ request_id: 'request-1' }), {
-          status: 200,
-        })
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ request_id: 'request-1' }), {
+        status: 200,
+      })
+    );
     vi.stubGlobal('fetch', fetchMock);
     await expect(
       requestCoexistenceSync(config, 'token', '108261528923943', 'history')

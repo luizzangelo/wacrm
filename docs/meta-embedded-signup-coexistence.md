@@ -17,7 +17,11 @@ Variáveis públicas de build/runtime:
 
 - `NEXT_PUBLIC_META_APP_ID`: App ID da Meta;
 - `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID`: configuração do Embedded
-  Signup.
+  Signup;
+- `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_REDIRECT_URI`: URI HTTPS canônica usada
+  tanto em `FB.login` quanto na troca server-side do authorization code. A
+  igualdade inclui path e trailing slash; produção usa
+  `https://crm.luizangelo.com.br/`.
 
 Variáveis somente do servidor:
 
@@ -39,16 +43,20 @@ Next.js.
    `response_type: "code"`, `override_default_response_type: true`,
    `featureType: "whatsapp_business_app_onboarding"` e Session Info v3.
 3. O listener aceita `postMessage` somente de origens Facebook conhecidas e
-   interpreta finish, cancel e error. O `phone_number_id` é opcional.
+   interpreta `FINISH`, `FINISH_ONLY_WABA`,
+   `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING`, cancel e error. O
+   `phone_number_id` é opcional e o evento preserva a distinção entre standard
+   e coexistência.
 4. O browser combina o authorization code com os hints mínimos da sessão e os
    envia a `POST /api/whatsapp/embedded-signup/complete`.
 5. O backend exige sessão, role admin, same-origin e rate limit. A account vem
    exclusivamente da sessão; IDs do browser nunca concedem autorização.
 6. O backend troca o code uma única vez, valida o App ID, scopes, acesso
    granular à WABA e descobre os números pela Graph API.
-7. Apenas números com `is_on_biz_app=true` e `platform_type=CLOUD_API` são
-   elegíveis. Um único número é escolhido automaticamente; múltiplos números
-   geram uma seleção explícita em sessão curta, server-only.
+7. No modo coexistência, apenas números com `is_on_biz_app=true` e
+   `platform_type=CLOUD_API` são elegíveis. No modo standard, números do
+   WhatsApp Business App não são aceitos. Múltiplos números sempre geram uma
+   seleção explícita em sessão curta, server-only.
 8. Antes de persistir, o backend verifica se o número já pertence a outra
    account. O token é cifrado com a implementação AES-256-GCM existente.
 9. O App é inscrito em `/{WABA_ID}/subscribed_apps` e a inscrição é confirmada
@@ -56,6 +64,14 @@ Next.js.
 10. O backend solicita uma vez `smb_app_state_sync` e uma vez `history` em
     `/{PHONE_NUMBER_ID}/smb_app_data`. Resultados ambíguos ficam terminais como
     `delivery_unknown`, sem retry cego.
+
+No fluxo standard, o backend nunca inventa PIN. Um número novo permanece em
+sessão cifrada e a UI solicita o PIN de seis dígitos; somente depois confirma
+`subscribed_apps`, chama o helper existente de `/{phone_number_id}/register` e
+persiste a conexão como ativa. Um número já registrado para a mesma account não
+é registrado novamente. `FINISH_ONLY_WABA` sem número retorna um estado
+recuperável e não cria `whatsapp_config` ativa. O modo coexistência nunca chama
+`/register`.
 
 O authorization code não é persistido. Se a troca tiver resultado ambíguo, o
 mesmo code não deve ser reutilizado; o usuário inicia um novo onboarding.
@@ -72,8 +88,9 @@ account e um `phone_number_id` único globalmente. O modo coexistência registra
 - estado de desconexão/offboarding.
 
 `whatsapp_embedded_signup_sessions` guarda temporariamente uma seleção
-ambígua de números e o token cifrado. A tabela tem RLS, não concede acesso a
-`anon`/`authenticated` e é acessada somente pelo backend com service role.
+ambígua de números ou a conclusão de registro standard, o modo do fluxo e o
+token cifrado. A tabela tem RLS, não concede acesso a `anon`/`authenticated` e
+é acessada somente pelo backend com service role.
 
 `messages.source` distingue `cloud_api`, `whatsapp_business_app` e
 `coexistence_history`.

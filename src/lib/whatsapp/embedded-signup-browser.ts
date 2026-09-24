@@ -6,6 +6,11 @@ export const META_POST_MESSAGE_ORIGINS = new Set([
 export type EmbeddedSignupSessionEvent =
   | {
       kind: 'finish';
+      event:
+        | 'FINISH'
+        | 'FINISH_ONLY_WABA'
+        | 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING';
+      flowMode: 'standard' | 'coexistence';
       wabaId: string;
       phoneNumberId: string | null;
       businessId: string | null;
@@ -41,7 +46,8 @@ export function parseEmbeddedSignupMessage(
   if (event === 'ERROR') return { kind: 'error' };
   if (
     event !== 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' &&
-    event !== 'FINISH'
+    event !== 'FINISH' &&
+    event !== 'FINISH_ONLY_WABA'
   ) {
     return null;
   }
@@ -64,6 +70,11 @@ export function parseEmbeddedSignupMessage(
       : null;
   return {
     kind: 'finish',
+    event,
+    flowMode:
+      event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
+        ? 'coexistence'
+        : 'standard',
     wabaId: data.waba_id,
     phoneNumberId,
     businessId,
@@ -88,6 +99,7 @@ export interface FacebookSdk {
       config_id: string;
       response_type: 'code';
       override_default_response_type: true;
+      redirect_uri: string;
       extras: {
         setup: Record<string, never>;
         featureType: 'whatsapp_business_app_onboarding';

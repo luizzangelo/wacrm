@@ -9,21 +9,28 @@ const h = vi.hoisted(() => ({
   discover: vi.fn(),
   subscribe: vi.fn(),
   sync: vi.fn(),
+  register: vi.fn(),
   encrypted: [] as string[],
   upserts: [] as Array<Record<string, unknown>>,
   inserts: [] as Array<Record<string, unknown>>,
   updates: [] as Array<Record<string, unknown>>,
   claimed: null as null | { account_id: string },
+  existing: null as null | { phone_number_id: string; registered_at: string },
   pending: null as null | Record<string, unknown>,
 }));
 
 function query(table: string) {
   let result: { data: unknown; error: unknown } = { data: null, error: null };
+  let hasDifferentAccountFilter = false;
   const chain: Record<string, unknown> = {};
   const self = chain as typeof chain & PromiseLike<typeof result>;
-  for (const method of ['select', 'eq', 'neq', 'is', 'lt', 'delete']) {
+  for (const method of ['select', 'eq', 'is', 'lt', 'delete']) {
     chain[method] = vi.fn(() => self);
   }
+  chain.neq = vi.fn(() => {
+    hasDifferentAccountFilter = true;
+    return self;
+  });
   chain.insert = vi.fn((row: Record<string, unknown>) => {
     h.inserts.push(row);
     if (table === 'whatsapp_embedded_signup_sessions') {
@@ -44,7 +51,11 @@ function query(table: string) {
   });
   chain.single = vi.fn(async () => result);
   chain.maybeSingle = vi.fn(async () => {
-    if (table === 'whatsapp_config') return { data: h.claimed, error: null };
+    if (table === 'whatsapp_config')
+      return {
+        data: hasDifferentAccountFilter ? h.claimed : h.existing,
+        error: null,
+      };
     if (table === 'whatsapp_embedded_signup_sessions') {
       return { data: h.pending, error: null };
     }
@@ -84,7 +95,11 @@ vi.mock('@/lib/whatsapp/embedded-signup-config', () => ({
     configId: '1449663160367056',
     graphVersion: 'v26.0',
     appSecret: 'server-only',
+    redirectUri: 'https://crm.luizangelo.com.br/',
   }),
+}));
+vi.mock('@/lib/whatsapp/meta-api', () => ({
+  registerPhoneNumber: h.register,
 }));
 vi.mock('@/lib/whatsapp/embedded-signup-meta', async (importOriginal) => ({
   ...(await importOriginal<
@@ -141,11 +156,13 @@ beforeEach(() => {
   h.discover.mockResolvedValue([PHONE]);
   h.subscribe.mockResolvedValue(undefined);
   h.sync.mockResolvedValue('request-1');
+  h.register.mockResolvedValue({ success: true, alreadyRegistered: false });
   h.encrypted.length = 0;
   h.upserts.length = 0;
   h.inserts.length = 0;
   h.updates.length = 0;
   h.claimed = null;
+  h.existing = null;
   h.pending = null;
 });
 
@@ -171,6 +188,7 @@ describe('POST Embedded Signup completion', () => {
       request({
         kind: 'complete',
         code: 'authorization-code-123',
+        flow_mode: 'coexistence',
         waba_id: '2295585011204142',
       })
     );
@@ -202,6 +220,7 @@ describe('POST Embedded Signup completion', () => {
       request({
         kind: 'complete',
         code: 'authorization-code-123',
+        flow_mode: 'coexistence',
         waba_id: '2295585011204142',
       })
     );
@@ -219,6 +238,7 @@ describe('POST Embedded Signup completion', () => {
       request({
         kind: 'complete',
         code: 'authorization-code-123',
+        flow_mode: 'coexistence',
         waba_id: '2295585011204142',
       })
     );
@@ -236,6 +256,7 @@ describe('POST Embedded Signup completion', () => {
       request({
         kind: 'complete',
         code: 'authorization-code-123',
+        flow_mode: 'coexistence',
         waba_id: '2295585011204142',
       })
     );
@@ -252,6 +273,7 @@ describe('POST Embedded Signup completion', () => {
       })
     );
     expect(h.sync).not.toHaveBeenCalled();
+    expect(h.register).not.toHaveBeenCalled();
   });
 
   it('escrows an encrypted token when multiple numbers require selection', async () => {
@@ -267,6 +289,7 @@ describe('POST Embedded Signup completion', () => {
       request({
         kind: 'complete',
         code: 'authorization-code-123',
+        flow_mode: 'coexistence',
         waba_id: '2295585011204142',
       })
     );
@@ -292,6 +315,7 @@ describe('POST Embedded Signup completion', () => {
       meta_business_id: null,
       token_type: 'bearer',
       token_expires_at: null,
+      flow_mode: 'coexistence',
       candidates: [{ id: PHONE.id }],
       expires_at: new Date(Date.now() + 60_000).toISOString(),
       consumed_at: null,
@@ -316,5 +340,172 @@ describe('POST Embedded Signup completion', () => {
     expect(h.updates).toContainEqual(
       expect.objectContaining({ consumed_at: expect.any(String) })
     );
+  });
+
+  it('keeps FINISH_ONLY_WABA recoverable when standard has no phone', async () => {
+    h.discover.mockResolvedValue([]);
+    const response = await POST(
+      request({
+        kind: 'complete',
+        code: 'authorization-code-123',
+        flow_mode: 'standard',
+        waba_id: '2295585011204142',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      connected: false,
+      waba_created: true,
+      requires_phone_number: true,
+    });
+    expect(h.upserts).toHaveLength(0);
+    expect(h.subscribe).not.toHaveBeenCalled();
+    expect(h.register).not.toHaveBeenCalled();
+  });
+
+  it('requires explicit selection for multiple standard phones', async () => {
+    h.discover.mockResolvedValue([
+      { ...PHONE, isOnBizApp: false },
+      {
+        ...PHONE,
+        id: '108261528923944',
+        displayPhoneNumber: '+55 85 99999-0001',
+        isOnBizApp: false,
+      },
+    ]);
+    const response = await POST(
+      request({
+        kind: 'complete',
+        code: 'authorization-code-123',
+        flow_mode: 'standard',
+        waba_id: '2295585011204142',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      connected: false,
+      requires_phone_selection: true,
+    });
+    expect(h.inserts[0]).toMatchObject({ flow_mode: 'standard' });
+    expect(h.upserts).toHaveLength(0);
+  });
+
+  it('escrows one new standard phone and requests a PIN without connecting', async () => {
+    h.discover.mockResolvedValue([{ ...PHONE, isOnBizApp: false }]);
+    const response = await POST(
+      request({
+        kind: 'complete',
+        code: 'authorization-code-123',
+        flow_mode: 'standard',
+        waba_id: '2295585011204142',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      connected: false,
+      requires_registration_pin: true,
+      phone_number_id: PHONE.id,
+    });
+    expect(h.inserts[0]).toMatchObject({
+      flow_mode: 'standard',
+      encrypted_access_token: 'enc::business-token',
+    });
+    expect(h.register).not.toHaveBeenCalled();
+    expect(h.subscribe).not.toHaveBeenCalled();
+    expect(h.upserts).toHaveLength(0);
+  });
+
+  it('continues an already registered standard number without calling register again', async () => {
+    h.existing = {
+      phone_number_id: PHONE.id,
+      registered_at: '2026-09-24T12:00:00.000Z',
+    };
+    h.discover.mockResolvedValue([{ ...PHONE, isOnBizApp: false }]);
+    const response = await POST(
+      request({
+        kind: 'complete',
+        code: 'authorization-code-123',
+        flow_mode: 'standard',
+        waba_id: '2295585011204142',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      connected: true,
+      connection_mode: 'standard',
+    });
+    expect(h.register).not.toHaveBeenCalled();
+    expect(h.subscribe).toHaveBeenCalledTimes(1);
+    expect(h.upserts[0]).toMatchObject({
+      status: 'connected',
+      registered_at: '2026-09-24T12:00:00.000Z',
+    });
+  });
+
+  it('registers a standard phone with the supplied PIN and never runs coexistence sync', async () => {
+    h.pending = {
+      id: '70000000-0000-4000-8000-000000000001',
+      encrypted_access_token: 'enc::business-token',
+      waba_id: '2295585011204142',
+      meta_business_id: null,
+      token_type: 'bearer',
+      token_expires_at: null,
+      flow_mode: 'standard',
+      candidates: [{ id: PHONE.id }],
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+      consumed_at: null,
+    };
+    h.discover.mockResolvedValue([{ ...PHONE, isOnBizApp: false }]);
+    const response = await POST(
+      request({
+        kind: 'select',
+        session_id: '70000000-0000-4000-8000-000000000001',
+        phone_number_id: PHONE.id,
+        pin: '123456',
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(h.subscribe).toHaveBeenCalledTimes(1);
+    expect(h.register).toHaveBeenCalledWith({
+      phoneNumberId: PHONE.id,
+      accessToken: 'business-token',
+      pin: '123456',
+      graphVersion: 'v26.0',
+    });
+    expect(h.upserts[0]).toMatchObject({
+      connection_mode: 'standard',
+      status: 'connected',
+      registered_at: expect.any(String),
+    });
+    expect(h.sync).not.toHaveBeenCalled();
+  });
+
+  it('does not persist or connect a standard phone when registration fails', async () => {
+    h.pending = {
+      id: '70000000-0000-4000-8000-000000000001',
+      encrypted_access_token: 'enc::business-token',
+      waba_id: '2295585011204142',
+      meta_business_id: null,
+      token_type: 'bearer',
+      token_expires_at: null,
+      flow_mode: 'standard',
+      candidates: [{ id: PHONE.id }],
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+      consumed_at: null,
+    };
+    h.discover.mockResolvedValue([{ ...PHONE, isOnBizApp: false }]);
+    h.register.mockRejectedValue(new Error('provider text must not leak'));
+    const response = await POST(
+      request({
+        kind: 'select',
+        session_id: '70000000-0000-4000-8000-000000000001',
+        phone_number_id: PHONE.id,
+        pin: '123456',
+      })
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'registration_failed' });
+    expect(h.upserts).toHaveLength(0);
+    expect(h.sync).not.toHaveBeenCalled();
   });
 });
