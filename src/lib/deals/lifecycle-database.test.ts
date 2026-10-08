@@ -112,6 +112,14 @@ beforeAll(async () => {
       VALUES ('${ATTRIBUTION}','${ACCOUNT}','${CONTACT}','isolated-test-click','isolated-test-waba');
     INSERT INTO meta_conversion_events(id,account_id,event_name,event_id,event_time,status,attempts)
       VALUES ('${HISTORICAL_EVENT}','${ACCOUNT}','LeadSubmitted','historical',NOW(),'failed',1);`);
+  await db.exec(
+    readFileSync(
+      resolve(
+        'supabase/migrations/20261008160000_meta_conversion_event_names.sql'
+      ),
+      'utf8'
+    )
+  );
   historicalBefore = (await db.query('SELECT * FROM meta_conversion_events'))
     .rows;
   await db.exec(
@@ -230,7 +238,12 @@ describe('actual PostgreSQL deal lifecycle migration and central RPC', () => {
       ).rejects.toThrow('stage_identity_immutable');
     }
   );
-  it.each(['LeadSubmitted', 'QualifiedLead', 'Purchase'])(
+  it.each([
+    'LeadSubmitted',
+    'Lead Qualificado',
+    'Lead Desqualificado',
+    'Purchase',
+  ])(
     'forbids %s mapping on loss',
     async (event) => {
       await expect(
@@ -413,7 +426,7 @@ describe('actual PostgreSQL deal lifecycle migration and central RPC', () => {
   });
   it.each([
     [LEAD, 'LeadSubmitted'],
-    [QUALIFIED, 'QualifiedLead'],
+    [QUALIFIED, 'Lead Qualificado'],
     [PURCHASE, 'Purchase'],
   ])(
     'preserves existing conversion semantics and dedupe for %s',

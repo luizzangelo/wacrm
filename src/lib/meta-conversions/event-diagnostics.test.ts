@@ -368,18 +368,18 @@ describe('read-only tenant repository', () => {
     async (status) => {
       const db = database([
         row(),
-        row({ status, event_name: 'QualifiedLead' }),
+        row({ status, event_name: 'Lead Qualificado' }),
       ]);
       const result = await listEventDiagnostics(db.client, account, {
         page: 1,
         pageSize: 20,
         status,
-        eventName: 'QualifiedLead',
+        eventName: 'Lead Qualificado',
       });
       expect(result.total).toBe(1);
       expect(result.events[0]).toMatchObject({
         status,
-        event_name: 'QualifiedLead',
+        event_name: 'Lead Qualificado',
       });
       expect(result.counts.failed).toBe(status === 'failed' ? 2 : 1);
     }

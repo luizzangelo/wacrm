@@ -185,7 +185,7 @@ BEGIN
   VALUES
     (v_stage_none, v_pipeline_a, 'No event', 0, NULL),
     (v_stage_lead, v_pipeline_a, 'Lead', 1, 'LeadSubmitted'),
-    (v_stage_qualified, v_pipeline_a, 'Qualified', 2, 'QualifiedLead'),
+    (v_stage_qualified, v_pipeline_a, 'Qualified', 2, 'Lead Qualificado'),
     (v_stage_purchase, v_pipeline_a, 'Purchase', 3, 'Purchase'),
     (v_stage_b, v_pipeline_b, 'Lead B', 0, 'LeadSubmitted');
 
@@ -246,7 +246,7 @@ BEGIN
     ),
     (
       v_account_a, v_deal_a, v_contact_a, v_attribution_a, v_stage_qualified,
-      'QualifiedLead', 'event-a-qualified', NOW(), NULL, NULL, 'sent'
+      'Lead Qualificado', 'event-a-qualified', NOW(), NULL, NULL, 'sent'
     ),
     (
       v_account_a, v_deal_a, v_contact_a, v_attribution_a, v_stage_purchase,
@@ -337,7 +337,7 @@ BEGIN
     INSERT INTO public.meta_conversion_events (
       account_id, deal_id, event_name, event_id, event_time, status
     ) VALUES (
-      v_account_a, v_deal_b, 'QualifiedLead', 'event-cross-deal', NOW(), 'pending'
+      v_account_a, v_deal_b, 'Lead Qualificado', 'event-cross-deal', NOW(), 'pending'
     );
     RAISE EXCEPTION 'cross-account event deal was accepted' USING ERRCODE = 'P0001';
   EXCEPTION WHEN foreign_key_violation THEN
@@ -348,7 +348,7 @@ BEGIN
     INSERT INTO public.meta_conversion_events (
       account_id, stage_id, event_name, event_id, event_time, status
     ) VALUES (
-      v_account_a, v_stage_b, 'QualifiedLead', 'event-cross-stage', NOW(), 'pending'
+      v_account_a, v_stage_b, 'Lead Qualificado', 'event-cross-stage', NOW(), 'pending'
     );
     RAISE EXCEPTION 'cross-account event stage was accepted' USING ERRCODE = 'P0001';
   EXCEPTION WHEN check_violation THEN

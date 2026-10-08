@@ -388,7 +388,11 @@ export interface MessageTemplate {
 // ============================================================
 
 export type MetaConversionEvent =
-  'LeadSubmitted' | 'QualifiedLead' | 'Purchase';
+  | 'LeadSubmitted'
+  | 'Lead Qualificado'
+  | 'Lead Desqualificado'
+  | 'Purchase'
+  | 'QualifiedLead';
 
 export type MetaAttributionEnrichmentStatus = 'pending' | 'enriched' | 'failed';
 

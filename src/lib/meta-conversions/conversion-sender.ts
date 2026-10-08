@@ -333,9 +333,13 @@ export function buildMetaConversionPayload(
   if (
     !Number.isFinite(eventTimeMs) ||
     eventTimeMs < 0 ||
-    !['LeadSubmitted', 'QualifiedLead', 'Purchase'].includes(
-      event.event_name
-    ) ||
+    ![
+      'LeadSubmitted',
+      'Lead Qualificado',
+      'Lead Desqualificado',
+      'Purchase',
+      'QualifiedLead',
+    ].includes(event.event_name) ||
     !isNonEmpty(event.event_id) ||
     !isNonEmpty(attribution.waba_id) ||
     !isNonEmpty(attribution.ctwa_clid)

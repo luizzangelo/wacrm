@@ -38,7 +38,7 @@ function stage(
 }
 
 describe('pipeline stage Meta conversion mapping', () => {
-  it('maps the four select choices to their persisted values', () => {
+  it('maps the five select choices to their persisted values', () => {
     expect(
       META_CONVERSION_SELECT_OPTIONS.map(({ value, event }) => ({
         value,
@@ -47,7 +47,8 @@ describe('pipeline stage Meta conversion mapping', () => {
     ).toEqual([
       { value: META_CONVERSION_SELECT_NONE, event: null },
       { value: 'LeadSubmitted', event: 'LeadSubmitted' },
-      { value: 'QualifiedLead', event: 'QualifiedLead' },
+      { value: 'Lead Qualificado', event: 'Lead Qualificado' },
+      { value: 'Lead Desqualificado', event: 'Lead Desqualificado' },
       { value: 'Purchase', event: 'Purchase' },
     ]);
 
@@ -57,8 +58,11 @@ describe('pipeline stage Meta conversion mapping', () => {
     expect(selectValueToMetaConversionEvent('LeadSubmitted')).toBe(
       'LeadSubmitted'
     );
-    expect(selectValueToMetaConversionEvent('QualifiedLead')).toBe(
-      'QualifiedLead'
+    expect(selectValueToMetaConversionEvent('Lead Qualificado')).toBe(
+      'Lead Qualificado'
+    );
+    expect(selectValueToMetaConversionEvent('Lead Desqualificado')).toBe(
+      'Lead Desqualificado'
     );
     expect(selectValueToMetaConversionEvent('Purchase')).toBe('Purchase');
   });
@@ -70,7 +74,13 @@ describe('pipeline stage Meta conversion mapping', () => {
 
     expect(
       labelKeys.map((key) => ptBRMessages.Pipelines.settings[key])
-    ).toEqual(['Não enviar evento', 'Lead', 'Lead qualificado', 'Compra']);
+    ).toEqual([
+      'Não enviar evento',
+      'Lead',
+      'Lead Qualificado',
+      'Lead Desqualificado',
+      'Compra',
+    ]);
     expect(labelKeys.every((key) => enMessages.Pipelines.settings[key])).toBe(
       true
     );
@@ -84,7 +94,7 @@ describe('pipeline stage Meta conversion mapping', () => {
       stage('purchase', 'pipeline-a', 'Purchase', { position: 3 }),
       stage('none', 'pipeline-a', null, { position: 0 }),
       stage('lead', 'pipeline-a', 'LeadSubmitted', { position: 1 }),
-      stage('qualified', 'pipeline-a', 'QualifiedLead', { position: 2 }),
+      stage('qualified', 'pipeline-a', 'Lead Qualificado', { position: 2 }),
       { ...stage('legacy', 'pipeline-a'), meta_conversion_event: undefined },
     ]);
 
@@ -104,8 +114,8 @@ describe('pipeline stage Meta conversion mapping', () => {
     expect(metaConversionEventToSelectValue('LeadSubmitted')).toBe(
       'LeadSubmitted'
     );
-    expect(metaConversionEventToSelectValue('QualifiedLead')).toBe(
-      'QualifiedLead'
+    expect(metaConversionEventToSelectValue('Lead Qualificado')).toBe(
+      'Lead Qualificado'
     );
     expect(metaConversionEventToSelectValue('Purchase')).toBe('Purchase');
   });
@@ -124,7 +134,8 @@ describe('pipeline stage Meta conversion mapping', () => {
 
   it.each([
     ['LeadSubmitted', 'metaConversionDuplicateLead'],
-    ['QualifiedLead', 'metaConversionDuplicateQualifiedLead'],
+    ['Lead Qualificado', 'metaConversionDuplicateQualifiedLead'],
+    ['Lead Desqualificado', 'metaConversionDuplicateDisqualifiedLead'],
     ['Purchase', 'metaConversionDuplicatePurchase'],
   ] as const)('blocks duplicate %s mappings in one pipeline', (event, key) => {
     expect(
@@ -148,7 +159,7 @@ describe('pipeline stage Meta conversion mapping', () => {
   it('persists mappings and keeps them attached to stage IDs after reorder, rename, and color changes', () => {
     const original = preparePipelineStages([
       stage('lead', 'pipeline-a', 'LeadSubmitted', { position: 0 }),
-      stage('qualified', 'pipeline-a', 'QualifiedLead', { position: 1 }),
+      stage('qualified', 'pipeline-a', 'Lead Qualificado', { position: 1 }),
     ]);
     const changed = [
       {
@@ -166,7 +177,7 @@ describe('pipeline stage Meta conversion mapping', () => {
         name: 'Renamed qualified',
         color: '#f97316',
         position: 0,
-        meta_conversion_event: 'QualifiedLead',
+        meta_conversion_event: 'Lead Qualificado',
       },
       {
         id: 'lead',
@@ -215,11 +226,11 @@ describe('pipeline stage Meta conversion mapping', () => {
       message:
         'duplicate key value violates unique constraint idx_pipeline_stages_pipeline_meta_conversion_event',
       details:
-        'Key (pipeline_id, meta_conversion_event)=(pipeline-a, QualifiedLead) already exists.',
+        'Key (pipeline_id, meta_conversion_event)=(pipeline-a, Lead Qualificado) already exists.',
     };
 
     expect(isMetaConversionUniqueViolation(error)).toBe(true);
-    expect(getMetaConversionEventFromError(error)).toBe('QualifiedLead');
+    expect(getMetaConversionEventFromError(error)).toBe('Lead Qualificado');
     expect(isMetaConversionUniqueViolation({ code: '42501' })).toBe(false);
     expect(
       isMetaConversionUniqueViolation({

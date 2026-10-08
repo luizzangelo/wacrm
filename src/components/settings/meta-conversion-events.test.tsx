@@ -75,7 +75,7 @@ describe('event diagnostic presentation', () => {
   it('shows stale warning without recovery controls or false immutable attempt time', () => {
     const event = serializeEventDiagnostic(
       {
-        event_name: 'QualifiedLead',
+        event_name: 'Lead Qualificado',
         status: 'sending',
         updated_at: '2026-09-16T10:00:00Z',
       },

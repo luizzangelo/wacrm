@@ -14,9 +14,14 @@ export const META_CONVERSION_SELECT_OPTIONS = [
     labelKey: 'metaConversionLead',
   },
   {
-    value: 'QualifiedLead',
-    event: 'QualifiedLead',
+    value: 'Lead Qualificado',
+    event: 'Lead Qualificado',
     labelKey: 'metaConversionQualifiedLead',
+  },
+  {
+    value: 'Lead Desqualificado',
+    event: 'Lead Desqualificado',
+    labelKey: 'metaConversionDisqualifiedLead',
   },
   {
     value: 'Purchase',
@@ -30,6 +35,7 @@ export const META_CONVERSION_SELECT_OPTIONS = [
     | 'metaConversionNone'
     | 'metaConversionLead'
     | 'metaConversionQualifiedLead'
+    | 'metaConversionDisqualifiedLead'
     | 'metaConversionPurchase';
 }>;
 
@@ -134,12 +140,16 @@ export function duplicateMetaConversionMessageKey(
 ):
   | 'metaConversionDuplicateLead'
   | 'metaConversionDuplicateQualifiedLead'
+  | 'metaConversionDuplicateDisqualifiedLead'
   | 'metaConversionDuplicatePurchase' {
   switch (event) {
     case 'LeadSubmitted':
       return 'metaConversionDuplicateLead';
+    case 'Lead Qualificado':
     case 'QualifiedLead':
       return 'metaConversionDuplicateQualifiedLead';
+    case 'Lead Desqualificado':
+      return 'metaConversionDuplicateDisqualifiedLead';
     case 'Purchase':
       return 'metaConversionDuplicatePurchase';
   }

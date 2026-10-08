@@ -105,7 +105,7 @@ BEGIN
   VALUES
     (v_stage_none, v_pipeline_a, 'None', 0, NULL),
     (v_stage_lead, v_pipeline_a, 'Lead', 1, 'LeadSubmitted'),
-    (v_stage_qualified, v_pipeline_a, 'Qualified', 2, 'QualifiedLead'),
+    (v_stage_qualified, v_pipeline_a, 'Qualified', 2, 'Lead Qualificado'),
     (v_stage_purchase, v_pipeline_a, 'Purchase', 3, 'Purchase'),
     (v_stage_b, v_pipeline_b, 'Foreign', 0, NULL);
 
@@ -312,7 +312,7 @@ BEGIN
     v_account_a, v_deal_pending, v_stage_qualified
   ) INTO v_result;
   IF v_result->>'conversionEventCreated' <> 'false' THEN
-    RAISE EXCEPTION 'QualifiedLead replay created another intent';
+    RAISE EXCEPTION 'Lead Qualificado replay created another intent';
   END IF;
 
   PERFORM public.move_deal_to_stage_with_conversion_intent(
@@ -328,7 +328,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.meta_conversion_events
     WHERE deal_id = v_deal_pending
-      AND event_name IN ('LeadSubmitted', 'QualifiedLead')
+      AND event_name IN ('LeadSubmitted', 'Lead Qualificado')
       AND (value IS NOT NULL OR currency IS NOT NULL)
   ) OR NOT EXISTS (
     SELECT 1 FROM public.meta_conversion_events
@@ -424,7 +424,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.meta_conversion_events
     WHERE deal_id = v_deal_disabled
-      AND event_name = 'QualifiedLead'
+      AND event_name = 'Lead Qualificado'
       AND status = 'pending'
       AND attribution_id = v_attribution_conversation
   ) THEN

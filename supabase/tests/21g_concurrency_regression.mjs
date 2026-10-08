@@ -41,7 +41,7 @@ try {
     const conversation=query(`INSERT INTO conversations(user_id,account_id,contact_id) VALUES('${user}','${account}','${contact}') RETURNING id;`).trim().split('\n')[0];
     const deal=query(`INSERT INTO deals(user_id,account_id,pipeline_id,contact_id,conversation_id) SELECT '${user}','${account}',id,'${contact}','${conversation}' FROM pipelines WHERE account_id='${account}' LIMIT 1 RETURNING id;`).trim().split('\n')[0];
     const attribution=query(`INSERT INTO meta_ad_attributions(account_id,contact_id,conversation_id,ctwa_clid,source_type) VALUES('${account}','${contact}','${conversation}','synthetic-21g-${suffix}','ad') RETURNING id;`).trim().split('\n')[0];
-    const event=query(`INSERT INTO meta_conversion_events(account_id,deal_id,attribution_id,event_name,event_id,event_time,status,attempts) VALUES('${account}','${deal}','${attribution}','QualifiedLead','synthetic-21g-${suffix}',now(),'pending',0) RETURNING id;`).trim().split('\n')[0];
+    const event=query(`INSERT INTO meta_conversion_events(account_id,deal_id,attribution_id,event_name,event_id,event_time,status,attempts) VALUES('${account}','${deal}','${attribution}','Lead Qualificado','synthetic-21g-${suffix}',now(),'pending',0) RETURNING id;`).trim().split('\n')[0];
     events.push({account,event});
   }
   const claim=({account,event})=>`BEGIN; SET LOCAL statement_timeout='10s'; WITH c AS (UPDATE meta_conversion_events SET status='sending',attempts=1 WHERE id='${event}' AND account_id='${account}' AND status='pending' AND attempts=0 RETURNING id) SELECT jsonb_build_object('claimed',count(*)) FROM c; COMMIT;`;

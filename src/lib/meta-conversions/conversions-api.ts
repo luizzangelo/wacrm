@@ -4,7 +4,12 @@ import {
 } from './constants';
 
 export interface MetaBusinessMessagingEvent {
-  event_name: 'LeadSubmitted' | 'QualifiedLead' | 'Purchase';
+  event_name:
+    | 'LeadSubmitted'
+    | 'Lead Qualificado'
+    | 'Lead Desqualificado'
+    | 'Purchase'
+    | 'QualifiedLead';
   event_time: number;
   event_id: string;
   action_source: 'business_messaging';

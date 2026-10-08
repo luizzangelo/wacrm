@@ -184,7 +184,7 @@ describe('moveDealToStage', () => {
           const eventName =
             request.newStageId === 'stage-b'
               ? ('LeadSubmitted' as const)
-              : ('QualifiedLead' as const);
+              : ('Lead Qualificado' as const);
 
           if (stageId === observedStage) {
             stageId = request.newStageId;

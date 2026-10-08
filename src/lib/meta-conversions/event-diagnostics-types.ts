@@ -10,6 +10,8 @@ export const DIAGNOSTIC_STATUSES = [
 ] as const;
 export const DIAGNOSTIC_EVENTS = [
   'LeadSubmitted',
+  'Lead Qualificado',
+  'Lead Desqualificado',
   'QualifiedLead',
   'Purchase',
 ] as const;

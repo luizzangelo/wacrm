@@ -430,7 +430,12 @@ describe('Delivery certainty: real client with mocked transport and repeat batch
 });
 
 describe('Meta conversion payload snapshots', () => {
-  it.each(['LeadSubmitted', 'QualifiedLead'] as const)(
+  it.each([
+    'LeadSubmitted',
+    'Lead Qualificado',
+    'Lead Desqualificado',
+    'QualifiedLead',
+  ] as const)(
     'builds %s with hashed customer data and no financial data',
     (eventName) => {
       const payload = buildMetaConversionPayload(
