@@ -10,6 +10,8 @@ UPDATE public.pipeline_stages
 SET meta_conversion_event = 'Lead Qualificado'
 WHERE meta_conversion_event = 'QualifiedLead';
 
+SET CONSTRAINTS ALL IMMEDIATE;
+
 ALTER TABLE public.pipeline_stages
   ADD CONSTRAINT pipeline_stages_meta_conversion_event_check
   CHECK (
