@@ -163,27 +163,31 @@ export async function loadPipelineDonut(db: DB): Promise<PipelineDonutData> {
 
 export async function loadResponseTime(
   db: DB,
-  accountId: string
+  accountId: string,
+  rangeDays: 7 | 30 | 90 = 30,
+  timezone = 'America/Fortaleza'
 ): Promise<ResponseTimeSummary> {
-  const { data, error } = await db.rpc('dashboard_response_time', {
+  const { data, error } = await db.rpc('dashboard_response_time_series', {
     p_account_id: accountId,
+    p_range_days: rangeDays,
+    p_timezone: timezone,
   });
   if (error) throw error;
   const rows = (data ?? []) as {
-    dow: number;
+    day: string;
     avg_minutes: number | null;
     samples: number;
-    this_week_avg: number | null;
-    last_week_avg: number | null;
+    current_period_avg: number | null;
+    previous_period_avg: number | null;
   }[];
   return {
     buckets: rows.map((r) => ({
-      dow: r.dow,
+      day: r.day,
       avgMinutes: r.avg_minutes,
       samples: Number(r.samples),
     })),
-    thisWeekAvg: rows[0]?.this_week_avg ?? null,
-    lastWeekAvg: rows[0]?.last_week_avg ?? null,
+    currentPeriodAvg: rows[0]?.current_period_avg ?? null,
+    previousPeriodAvg: rows[0]?.previous_period_avg ?? null,
   };
 }
 

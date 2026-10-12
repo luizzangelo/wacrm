@@ -2,7 +2,7 @@
 
 import { operationalErrorFields } from '@/lib/security/operational-log';
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import { useDashboardLossReasons } from '@/hooks/use-dashboard-loss-reasons'
@@ -63,9 +63,15 @@ export default function DashboardPage() {
   const [pipeline, setPipeline] = useState<PipelineDonutData | null>(null)
   const [pipelineLoading, setPipelineLoading] = useState(true)
 
-  const [responseTime, setResponseTime] = useState<ResponseTimeSummary | null>(null)
+  const [responseRange, setResponseRange] = useState<RangeDays>(30)
+  const [responseTime, setResponseTime] = useState<Record<RangeDays, ResponseTimeSummary | null>>({
+    7: null,
+    30: null,
+    90: null,
+  })
   const [responseTimeLoading, setResponseTimeLoading] = useState(true)
   const [responseTimeError, setResponseTimeError] = useState(false)
+  const responseRequestId = useRef(0)
 
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
   const [activityLoading, setActivityLoading] = useState(true)
@@ -125,7 +131,9 @@ export default function DashboardPage() {
     const load = async () => {
       await Promise.resolve();
       if (!active) return;
-      setResponseTime(null);
+      const requestId = ++responseRequestId.current;
+      setResponseRange(30);
+      setResponseTime({ 7: null, 30: null, 90: null });
       setResponseTimeLoading(true);
       setResponseTimeError(false);
       if (!accountId) {
@@ -133,12 +141,15 @@ export default function DashboardPage() {
         return;
       }
       try {
-        const result = await loadResponseTime(createClient(), accountId);
-        if (active) setResponseTime(result);
+        const result = await loadResponseTime(createClient(), accountId, 30);
+        if (active && requestId === responseRequestId.current)
+          setResponseTime((previous) => ({ ...previous, 30: result }));
       } catch {
-        if (active) setResponseTimeError(true);
+        if (active && requestId === responseRequestId.current)
+          setResponseTimeError(true);
       } finally {
-        if (active) setResponseTimeLoading(false);
+        if (active && requestId === responseRequestId.current)
+          setResponseTimeLoading(false);
       }
     };
     void load();
@@ -146,6 +157,42 @@ export default function DashboardPage() {
       active = false;
     };
   }, [accountId]);
+
+  const handleResponseRangeChange = useCallback(
+    (nextRange: RangeDays) => {
+      const requestId = ++responseRequestId.current
+      setResponseRange(nextRange)
+      setResponseTimeError(false)
+      if (responseTime[nextRange] !== null || !accountId) {
+        setResponseTimeLoading(false)
+        return
+      }
+
+      setResponseTimeLoading(true)
+      loadResponseTime(createClient(), accountId, nextRange)
+        .then((result) => {
+          if (requestId === responseRequestId.current)
+            setResponseTime((previous) => ({
+              ...previous,
+              [nextRange]: result,
+            }))
+        })
+        .catch((err) => {
+          if (requestId === responseRequestId.current) {
+            setResponseTimeError(true)
+            console.error(
+              '[dashboard] response time failed:',
+              operationalErrorFields(err)
+            )
+          }
+        })
+        .finally(() => {
+          if (requestId === responseRequestId.current)
+            setResponseTimeLoading(false)
+        })
+    },
+    [accountId, responseTime]
+  )
 
   // Range switch handler — kept in an event callback (not an effect)
   // so the setState calls stay out of the react-hooks/set-state-in-effect
@@ -263,7 +310,13 @@ export default function DashboardPage() {
 
       {/* Response time */}
       <LossReasonsChart {...losses} />
-      <ResponseTimeChart data={responseTime} loading={responseTimeLoading} error={responseTimeError} />
+      <ResponseTimeChart
+        data={responseTime[responseRange]}
+        loading={responseTimeLoading}
+        error={responseTimeError}
+        range={responseRange}
+        onRangeChange={handleResponseRangeChange}
+      />
 
       {/* Activity feed */}
       <ActivityFeed items={activity} loading={activityLoading} />

@@ -49,13 +49,13 @@ function wrap(
   );
 }
 const data: ResponseTimeSummary = {
-  buckets: Array.from({ length: 7 }, (_, dow) => ({
-    dow,
-    avgMinutes: dow === 0 ? 624 : dow === 1 ? 68 : null,
-    samples: dow < 2 ? 1 : 0,
+  buckets: Array.from({ length: 7 }, (_, index) => ({
+    day: `2026-10-${String(index + 6).padStart(2, '0')}`,
+    avgMinutes: index === 0 ? 624 : index === 1 ? 68 : null,
+    samples: index < 2 ? 1 : 0,
   })),
-  thisWeekAvg: 346,
-  lastWeekAvg: 3,
+  currentPeriodAvg: 346,
+  previousPeriodAvg: 3,
 };
 function LossHarness() {
   const losses = useDashboardLossReasons('account-fixture');
@@ -189,10 +189,25 @@ describe('loss chart: real Recharts, i18n, periods and zeros', () => {
 });
 describe('response chart: actual axes, summaries and locale', () => {
   it.each(Object.keys(locales) as (keyof typeof locales)[])(
-    'Sunday-first localized ticks and correct duration axis: %s',
+    'localized date ticks and correct duration axis: %s',
     async (locale) => {
       const { container } = render(
-        wrap(<ResponseTimeChart data={data} loading={false} />, locale)
+        wrap(
+          <ResponseTimeChart
+            data={data}
+            loading={false}
+            range={7}
+            onRangeChange={vi.fn()}
+          />,
+          locale
+        )
+      );
+      const expectedDates = data.buckets.map((bucket) =>
+        new Intl.DateTimeFormat(locale, {
+          day: '2-digit',
+          month: '2-digit',
+          timeZone: 'UTC',
+        }).format(new Date(`${bucket.day}T00:00:00Z`))
       );
       await waitFor(() =>
         expect(
@@ -201,18 +216,14 @@ describe('response chart: actual axes, summaries and locale', () => {
               '.recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value'
             ),
           ].map((n) => n.textContent)
-        ).toEqual(
-          Object.values(locales[locale].Dashboard.responseTimeChart.weekdays)
-        )
+        ).toEqual(expectedDates)
       );
       const labels = [
         ...container.querySelectorAll(
           '.recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value'
         ),
       ].map((n) => n.textContent);
-      expect(labels).toEqual(
-        Object.values(locales[locale].Dashboard.responseTimeChart.weekdays)
-      );
+      expect(labels).toEqual(expectedDates);
       const ticks = [
         ...container.querySelectorAll(
           '.recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value'
@@ -227,13 +238,28 @@ describe('response chart: actual axes, summaries and locale', () => {
       expect(container.querySelector('section')?.className).toContain('w-full');
     }
   );
-  it('weekly weighted values share duration formatter and retain 5-minute target', () => {
-    render(wrap(<ResponseTimeChart data={data} loading={false} />));
+  it('period selector works and weighted values retain the duration formatter', () => {
+    const onRangeChange = vi.fn();
+    render(
+      wrap(
+        <ResponseTimeChart
+          data={data}
+          loading={false}
+          range={30}
+          onRangeChange={onRangeChange}
+        />
+      )
+    );
     expect(screen.getByText('5h 46min')).toBeTruthy();
     expect(screen.getByText('3 min')).toBeTruthy();
     expect(screen.getByText('meta 5min')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: '30d' }).getAttribute('aria-pressed')
+    ).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: '90d' }));
+    expect(onRangeChange).toHaveBeenCalledWith(90);
   });
-  it('empty current week shows the existing empty state, not a false zero mean', () => {
+  it('empty selected period shows the existing empty state, not a false zero mean', () => {
     const empty = {
       ...data,
       buckets: data.buckets.map((b) => ({
@@ -241,9 +267,18 @@ describe('response chart: actual axes, summaries and locale', () => {
         avgMinutes: null,
         samples: 0,
       })),
-      thisWeekAvg: null,
+      currentPeriodAvg: null,
     };
-    render(wrap(<ResponseTimeChart data={empty} loading={false} />));
+    render(
+      wrap(
+        <ResponseTimeChart
+          data={empty}
+          loading={false}
+          range={7}
+          onRangeChange={vi.fn()}
+        />
+      )
+    );
     expect(screen.getByText('Nenhuma resposta registrada ainda')).toBeTruthy();
     expect(screen.getByText('—')).toBeTruthy();
   });
@@ -251,10 +286,17 @@ describe('response chart: actual axes, summaries and locale', () => {
     const zero = {
       ...data,
       buckets: data.buckets.map((b) => ({ ...b, avgMinutes: 0, samples: 1 })),
-      thisWeekAvg: 0,
+      currentPeriodAvg: 0,
     };
     const { container } = render(
-      wrap(<ResponseTimeChart data={zero} loading={false} />)
+      wrap(
+        <ResponseTimeChart
+          data={zero}
+          loading={false}
+          range={7}
+          onRangeChange={vi.fn()}
+        />
+      )
     );
     await waitFor(() =>
       expect(

@@ -35,6 +35,7 @@ beforeAll(async () => {
     'supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql',
     'supabase/migrations/20260917054725_dashboard_loss_history_and_response_metrics.sql',
     'supabase/migrations/20261012033347_dashboard_conversation_series_aggregate.sql',
+    'supabase/migrations/20261012035150_dashboard_response_time_series.sql',
   ])
     await db.exec(readFileSync(path, 'utf8'));
 }, 30000);
@@ -137,6 +138,28 @@ async function response(
       last_week_avg: number | null;
     }>('SELECT * FROM dashboard_response_time($1,$2,$3)', [
       account,
+      timezone,
+      now,
+    ])
+  ).rows;
+}
+
+async function responseSeries(
+  account = A,
+  rangeDays = 30,
+  now = NOW,
+  timezone = 'America/Fortaleza'
+) {
+  return (
+    await db.query<{
+      day: string | Date;
+      avg_minutes: number | null;
+      samples: number;
+      current_period_avg: number | null;
+      previous_period_avg: number | null;
+    }>('SELECT * FROM dashboard_response_time_series($1,$2,$3,$4)', [
+      account,
+      rangeDays,
       timezone,
       now,
     ])
@@ -520,5 +543,75 @@ describe('conversation series: complete daily aggregates beyond the Data API cap
       'incoming',
       'outgoing',
     ]);
+  });
+});
+
+describe('response-time series: selectable daily ranges', () => {
+  it.each([7, 30, 90])(
+    'returns %i zero-filled calendar dates',
+    async (days) => {
+      const rows = await responseSeries(A, days);
+      expect(rows).toHaveLength(days);
+      expect(seriesDay(rows.at(-1)!)).toBe('2026-09-17');
+      expect(rows.every((row) => row.samples === 0)).toBe(true);
+    }
+  );
+
+  it('groups observations by local date and compares the preceding equal range', async () => {
+    await pair('2026-09-06T04:00Z', 20);
+    await pair('2026-09-13T04:00Z', 5);
+    await pair('2026-09-13T05:00Z', 15);
+    const rows = await responseSeries(A, 7);
+    expect(rows.find((row) => seriesDay(row) === '2026-09-13')).toMatchObject({
+      avg_minutes: 10,
+      samples: 2,
+    });
+    expect(rows[0].current_period_avg).toBe(10);
+    expect(rows[0].previous_period_avg).toBe(20);
+  });
+
+  it('preserves tenant isolation for daily values and summaries', async () => {
+    await pair('2026-09-13T04:00Z', 5);
+    await pair('2026-09-13T04:00Z', 100, OTHER_C);
+    await db.exec(
+      `SET LOCAL ROLE authenticated; SET LOCAL test.account='${A}'; SET LOCAL test.member_role='viewer'`
+    );
+    expect((await responseSeries(A, 7))[0].current_period_avg).toBe(5);
+    expect(
+      (await responseSeries(B, 7)).every(
+        (row) => row.samples === 0 && row.current_period_avg === null
+      )
+    ).toBe(true);
+  });
+
+  it('aggregates beyond the Data API row cap without exposing message data', async () => {
+    await db.exec(`INSERT INTO messages(conversation_id,sender_type,created_at,status)
+      SELECT '${C}','customer','2026-09-13T04:00Z'::timestamptz+i*interval '1 second','delivered'
+      FROM generate_series(0,1001) i`);
+    await message('agent', '2026-09-13T05:00Z');
+    const row = (await responseSeries(A, 7)).find(
+      (item) => seriesDay(item) === '2026-09-13'
+    )!;
+    expect(row).toMatchObject({ avg_minutes: 60, samples: 1 });
+    expect(Object.keys(row).sort()).toEqual([
+      'avg_minutes',
+      'current_period_avg',
+      'day',
+      'previous_period_avg',
+      'samples',
+    ]);
+  });
+
+  it('rejects unsupported ranges and invalid timezones', async () => {
+    await db.exec('SAVEPOINT invalid_response_range');
+    await expect(responseSeries(A, 31)).rejects.toThrow(
+      'invalid dashboard range'
+    );
+    await db.exec('ROLLBACK TO SAVEPOINT invalid_response_range');
+    await db.exec('SAVEPOINT invalid_response_timezone');
+    await expect(responseSeries(A, 7, NOW, 'invalid')).rejects.toThrow(
+      'invalid timezone'
+    );
+    await db.exec('ROLLBACK TO SAVEPOINT invalid_response_timezone');
   });
 });

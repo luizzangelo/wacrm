@@ -36,12 +36,14 @@ export function DashboardBarChart({
   axisFormat,
   tooltipFormat,
   noSamples,
+  xAxisInterval = 0,
 }: {
   rows: DashboardBarRow[];
   integer?: boolean;
   axisFormat: (value: number) => string;
   tooltipFormat: (value: number) => string;
   noSamples: string;
+  xAxisInterval?: number;
 }) {
   const maximum = Math.max(0, ...rows.map((r) => r.value ?? 0));
   const scale = chartScale(
@@ -64,17 +66,13 @@ export function DashboardBarChart({
             />
             <XAxis
               dataKey="label"
-              interval={0}
+              interval={xAxisInterval}
               tickLine={false}
               axisLine={false}
               height={integer ? 65 : 30}
               tick={
                 integer
-                  ? ({
-                      x,
-                      y,
-                      payload,
-                    }: XAxisTickContentProps) => (
+                  ? ({ x, y, payload }: XAxisTickContentProps) => (
                       <text
                         className="recharts-cartesian-axis-tick-value"
                         x={x}

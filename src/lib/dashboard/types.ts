@@ -35,8 +35,8 @@ export interface PipelineDonutData {
 }
 
 export interface ResponseTimeBucket {
-  /** 0 = Sun … 6 = Sat; CURRENT calendar week, account timezone. */
-  dow: number
+  /** YYYY-MM-DD in the requested account-local calendar range. */
+  day: string
   /** Average first-response time in minutes. Null means no samples. */
   avgMinutes: number | null
   samples: number
@@ -44,8 +44,8 @@ export interface ResponseTimeBucket {
 
 export interface ResponseTimeSummary {
   buckets: ResponseTimeBucket[]
-  thisWeekAvg: number | null
-  lastWeekAvg: number | null
+  currentPeriodAvg: number | null
+  previousPeriodAvg: number | null
 }
 
 export type LossPeriod = 'day' | 'week' | 'month'

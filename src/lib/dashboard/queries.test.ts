@@ -74,40 +74,44 @@ describe('bounded server aggregates, explicit account scope', () => {
       loadLossReasons({ rpc } as unknown as SupabaseClient, 'account', 'day')
     ).rejects.toThrow('failure');
   });
-  it('response uses numeric minutes without conversion and Sunday-first server order', async () => {
+  it('response uses numeric minutes and date buckets for the requested range', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [
         {
-          dow: 0,
+          day: '2026-10-11',
           avg_minutes: 624,
           samples: 2,
-          this_week_avg: 624,
-          last_week_avg: 5,
+          current_period_avg: 624,
+          previous_period_avg: 5,
         },
         {
-          dow: 1,
+          day: '2026-10-12',
           avg_minutes: null,
           samples: 0,
-          this_week_avg: 624,
-          last_week_avg: 5,
+          current_period_avg: 624,
+          previous_period_avg: 5,
         },
       ],
       error: null,
     });
     const result = await loadResponseTime(
       { rpc } as unknown as SupabaseClient,
-      'account'
+      'account',
+      30,
+      'America/Fortaleza'
     );
-    expect(rpc).toHaveBeenCalledWith('dashboard_response_time', {
+    expect(rpc).toHaveBeenCalledWith('dashboard_response_time_series', {
       p_account_id: 'account',
+      p_range_days: 30,
+      p_timezone: 'America/Fortaleza',
     });
     expect(result).toEqual({
       buckets: [
-        { dow: 0, avgMinutes: 624, samples: 2 },
-        { dow: 1, avgMinutes: null, samples: 0 },
+        { day: '2026-10-11', avgMinutes: 624, samples: 2 },
+        { day: '2026-10-12', avgMinutes: null, samples: 0 },
       ],
-      thisWeekAvg: 624,
-      lastWeekAvg: 5,
+      currentPeriodAvg: 624,
+      previousPeriodAvg: 5,
     });
   });
   it('response query error is propagated', async () => {

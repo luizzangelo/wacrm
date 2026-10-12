@@ -2,22 +2,29 @@
 
 import { Clock } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
-import { durationLabel, WEEKDAY_KEYS } from '@/lib/dashboard/chart-format';
+import { durationLabel } from '@/lib/dashboard/chart-format';
 import type { ResponseTimeSummary } from '@/lib/dashboard/types';
 import { DashboardBarChart } from './dashboard-bar-chart';
 import { EmptyState } from './empty-state';
 import { Skeleton } from './skeleton';
+import { cn } from '@/lib/utils';
+
+type RangeDays = 7 | 30 | 90;
 
 export function ResponseTimeChart({
   data,
   loading,
   thresholdMinutes = 5,
   error = false,
+  range,
+  onRangeChange,
 }: {
   data: ResponseTimeSummary | null;
   loading: boolean;
   thresholdMinutes?: number;
   error?: boolean;
+  range: RangeDays;
+  onRangeChange: (range: RangeDays) => void;
 }) {
   const t = useTranslations('Dashboard.responseTimeChart');
   const locale = useLocale();
@@ -39,22 +46,42 @@ export function ResponseTimeChart({
               {t('target', { minutes: thresholdMinutes })}
             </span>
           )}
-          {data && (data.thisWeekAvg != null || data.lastWeekAvg != null) && (
-            <div>
-              <div className="text-muted-foreground">
-                {t('thisWeek')}{' '}
-                <span className="text-foreground font-medium tabular-nums">
-                  {durationLabel(data.thisWeekAvg, locale)}
-                </span>
+          {data &&
+            (data.currentPeriodAvg != null ||
+              data.previousPeriodAvg != null) && (
+              <div>
+                <div className="text-muted-foreground">
+                  {t('currentPeriod')}{' '}
+                  <span className="text-foreground font-medium tabular-nums">
+                    {durationLabel(data.currentPeriodAvg, locale)}
+                  </span>
+                </div>
+                <div className="text-muted-foreground">
+                  {t('previousPeriod')}{' '}
+                  <span className="tabular-nums">
+                    {durationLabel(data.previousPeriodAvg, locale)}
+                  </span>
+                </div>
               </div>
-              <div className="text-muted-foreground">
-                {t('lastWeek')}{' '}
-                <span className="tabular-nums">
-                  {durationLabel(data.lastWeekAvg, locale)}
-                </span>
-              </div>
-            </div>
-          )}
+            )}
+          <div className="bg-muted/60 flex items-center gap-1 rounded-lg p-1">
+            {([7, 30, 90] as const).map((days) => (
+              <button
+                key={days}
+                type="button"
+                aria-pressed={range === days}
+                onClick={() => onRangeChange(days)}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                  range === days
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {t('days', { count: days })}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
       <div className="p-5">
@@ -72,17 +99,25 @@ export function ResponseTimeChart({
           />
         ) : (
           <DashboardBarChart
-            rows={WEEKDAY_KEYS.map((key, dow) => ({
-              label: t(`weekdays.${key}`),
-              value:
-                data.buckets.find((b) => b.dow === dow)?.avgMinutes ?? null,
+            rows={data.buckets.map((bucket) => ({
+              label: formatChartDate(bucket.day, locale),
+              value: bucket.avgMinutes,
             }))}
             axisFormat={(v) => durationLabel(v, locale, true)}
             tooltipFormat={(v) => durationLabel(v, locale)}
             noSamples={t('noSamples')}
+            xAxisInterval={Math.max(0, Math.ceil(data.buckets.length / 7) - 1)}
           />
         )}
       </div>
     </section>
   );
+}
+
+function formatChartDate(day: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(`${day}T00:00:00Z`));
 }
