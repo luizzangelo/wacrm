@@ -34,6 +34,7 @@ beforeAll(async () => {
     'supabase/migrations/041_meta_conversion_stage_outbox.sql',
     'supabase/migrations/20260917035905_deal_initial_stage_and_loss.sql',
     'supabase/migrations/20260917054725_dashboard_loss_history_and_response_metrics.sql',
+    'supabase/migrations/20261012033347_dashboard_conversation_series_aggregate.sql',
   ])
     await db.exec(readFileSync(path, 'utf8'));
 }, 30000);
@@ -140,6 +141,32 @@ async function response(
       now,
     ])
   ).rows;
+}
+
+async function conversationSeries(
+  account = A,
+  rangeDays = 30,
+  now = NOW,
+  timezone = 'America/Fortaleza'
+) {
+  return (
+    await db.query<{
+      day: string;
+      incoming: number;
+      outgoing: number;
+    }>('SELECT * FROM dashboard_conversation_series($1,$2,$3,$4)', [
+      account,
+      rangeDays,
+      timezone,
+      now,
+    ])
+  ).rows;
+}
+
+function seriesDay(row: { day: string | Date }): string {
+  return row.day instanceof Date
+    ? row.day.toISOString().slice(0, 10)
+    : String(row.day).slice(0, 10);
 }
 describe('transactional immutable loss history', () => {
   it('does not backfill existing deals or count open deals with historical reasons', async () => {
@@ -410,6 +437,88 @@ describe('first response: complete bursts, weighted weeks, Sunday-first', () => 
       'last_week_avg',
       'samples',
       'this_week_avg',
+    ]);
+  });
+});
+
+describe('conversation series: complete daily aggregates beyond the Data API cap', () => {
+  it('returns every requested day with zero-filled buckets', async () => {
+    const rows = await conversationSeries(A, 7);
+    expect(rows).toHaveLength(7);
+    expect(seriesDay(rows[0])).toBe('2026-09-11');
+    expect(rows[0]).toMatchObject({ incoming: 0, outgoing: 0 });
+    expect(seriesDay(rows[6])).toBe('2026-09-17');
+  });
+
+  it('counts more than 1000 messages and preserves each local day', async () => {
+    await db.exec(`INSERT INTO messages(conversation_id,sender_type,created_at,status)
+      SELECT '${C}','customer','2026-09-13T04:00Z'::timestamptz+i*interval '1 second','delivered'
+      FROM generate_series(0,1099) i`);
+    await db.exec(`INSERT INTO messages(conversation_id,sender_type,created_at,status)
+      SELECT '${C}','agent','2026-09-14T04:00Z'::timestamptz+i*interval '1 second','sent'
+      FROM generate_series(0,249) i`);
+    const rows = await conversationSeries(A, 7);
+    expect(rows.find((row) => seriesDay(row) === '2026-09-13')).toMatchObject({
+      incoming: 1100,
+      outgoing: 0,
+    });
+    expect(rows.find((row) => seriesDay(row) === '2026-09-14')).toMatchObject({
+      incoming: 0,
+      outgoing: 250,
+    });
+  });
+
+  it('uses the requested timezone for calendar-day boundaries', async () => {
+    await message('customer', '2026-09-13T02:59:59Z');
+    await message('agent', '2026-09-13T03:00:00Z');
+    const rows = await conversationSeries(A, 7);
+    expect(rows.find((row) => seriesDay(row) === '2026-09-12')).toMatchObject({
+      incoming: 1,
+      outgoing: 0,
+    });
+    expect(rows.find((row) => seriesDay(row) === '2026-09-13')).toMatchObject({
+      incoming: 0,
+      outgoing: 1,
+    });
+  });
+
+  it('keeps tenant isolation when a member requests another account', async () => {
+    await message('customer', '2026-09-13T04:00Z');
+    await message('customer', '2026-09-13T04:00Z', { conv: OTHER_C });
+    await db.exec(
+      `SET LOCAL ROLE authenticated; SET LOCAL test.account='${A}'; SET LOCAL test.member_role='viewer'`
+    );
+    expect(
+      (await conversationSeries(A, 7)).reduce(
+        (sum, row) => sum + Number(row.incoming),
+        0
+      )
+    ).toBe(1);
+    expect(
+      (await conversationSeries(B, 7)).every(
+        (row) => Number(row.incoming) === 0 && Number(row.outgoing) === 0
+      )
+    ).toBe(true);
+  });
+
+  it('rejects unsupported ranges and invalid timezones', async () => {
+    await db.exec('SAVEPOINT invalid_range');
+    await expect(conversationSeries(A, 31)).rejects.toThrow(
+      'invalid dashboard range'
+    );
+    await db.exec('ROLLBACK TO SAVEPOINT invalid_range');
+    await db.exec('SAVEPOINT invalid_timezone');
+    await expect(conversationSeries(A, 30, NOW, 'invalid')).rejects.toThrow(
+      'invalid timezone'
+    );
+    await db.exec('ROLLBACK TO SAVEPOINT invalid_timezone');
+  });
+
+  it('returns only day and aggregate counts, with no message data', async () => {
+    expect(Object.keys((await conversationSeries(A, 7))[0]).sort()).toEqual([
+      'day',
+      'incoming',
+      'outgoing',
     ]);
   });
 });

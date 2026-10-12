@@ -1,8 +1,49 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
-import { loadLossReasons, loadResponseTime } from './queries';
+import {
+  loadConversationsSeries,
+  loadLossReasons,
+  loadResponseTime,
+} from './queries';
 import { LOST_REASONS } from '@/lib/deals/lifecycle';
 describe('bounded server aggregates, explicit account scope', () => {
+  it('loads the conversation chart from the bounded aggregate RPC', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { day: '2026-10-11', incoming: 98, outgoing: 160 },
+        { day: '2026-10-12', incoming: '1', outgoing: '1' },
+      ],
+      error: null,
+    });
+    const result = await loadConversationsSeries(
+      { rpc } as unknown as SupabaseClient,
+      'account',
+      30,
+      'America/Fortaleza'
+    );
+    expect(rpc).toHaveBeenCalledWith('dashboard_conversation_series', {
+      p_account_id: 'account',
+      p_range_days: 30,
+      p_timezone: 'America/Fortaleza',
+    });
+    expect(result).toEqual([
+      { day: '2026-10-11', incoming: 98, outgoing: 160 },
+      { day: '2026-10-12', incoming: 1, outgoing: 1 },
+    ]);
+  });
+
+  it('propagates conversation aggregate errors', async () => {
+    const rpc = vi.fn().mockResolvedValue({ error: new Error('failure') });
+    await expect(
+      loadConversationsSeries(
+        { rpc } as unknown as SupabaseClient,
+        'account',
+        30,
+        'America/Fortaleza'
+      )
+    ).rejects.toThrow('failure');
+  });
+
   it.each(['day', 'week', 'month'] as const)(
     'loss period %s requests only the scoped RPC',
     async (period) => {

@@ -81,11 +81,6 @@ export default function DashboardPage() {
       .catch((err) => console.error('[dashboard] metrics failed:', operationalErrorFields(err)))
       .finally(() => setMetricsLoading(false))
 
-    void loadConversationsSeries(db, 30)
-      .then((s) => setSeries((prev) => ({ ...prev, 30: s })))
-      .catch((err) => console.error('[dashboard] series failed:', operationalErrorFields(err)))
-      .finally(() => setSeriesLoading(false))
-
     void loadPipelineDonut(db)
       .then((p) => setPipeline(p))
       .catch((err) => console.error('[dashboard] pipeline failed:', operationalErrorFields(err)))
@@ -103,6 +98,27 @@ export default function DashboardPage() {
   useEffect(() => {
     loadAll()
   }, [loadAll])
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      await Promise.resolve()
+      if (!active || !accountId) return
+      setSeriesLoading(true)
+      try {
+        const result = await loadConversationsSeries(createClient(), accountId, 30)
+        if (active) setSeries((prev) => ({ ...prev, 30: result }))
+      } catch (err) {
+        console.error('[dashboard] series failed:', operationalErrorFields(err))
+      } finally {
+        if (active) setSeriesLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      active = false
+    }
+  }, [accountId])
 
   useEffect(() => {
     let active = true;
@@ -139,14 +155,15 @@ export default function DashboardPage() {
     (r: RangeDays) => {
       setRange(r)
       if (series[r] !== null) return
+      if (!accountId) return
       setSeriesLoading(true)
       const db = createClient()
-      loadConversationsSeries(db, r)
+      loadConversationsSeries(db, accountId, r)
         .then((s) => setSeries((prev) => ({ ...prev, [r]: s })))
         .catch((err) => console.error('[dashboard] series failed:', operationalErrorFields(err)))
         .finally(() => setSeriesLoading(false))
     },
-    [series],
+    [accountId, series],
   )
 
   return (

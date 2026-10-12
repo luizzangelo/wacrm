@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   daysAgoStart,
-  lastNDayKeys,
-  localDayKey,
   startOfLocalDay,
 } from './date-utils'
 import type {
@@ -18,8 +16,8 @@ import type {
 import { LOST_REASONS } from '@/lib/deals/lifecycle'
 
 // ------------------------------------------------------------
-// Legacy widgets aggregate client-side; loss/response use bounded server RPCs
-// with explicit account scope and invoker RLS. All queries remain RLS-scoped.
+// Chart aggregates use bounded server RPCs with explicit account scope and
+// invoker RLS. All queries remain RLS-scoped.
 // ------------------------------------------------------------
 
 type DB = SupabaseClient
@@ -100,29 +98,26 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
 
 export async function loadConversationsSeries(
   db: DB,
+  accountId: string,
   rangeDays: number,
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Fortaleza',
 ): Promise<ConversationsSeriesPoint[]> {
-  const start = daysAgoStart(rangeDays - 1).toISOString()
-  const { data, error } = await db
-    .from('messages')
-    .select('created_at, sender_type')
-    .gte('created_at', start)
-    .order('created_at', { ascending: true })
+  const { data, error } = await db.rpc('dashboard_conversation_series', {
+    p_account_id: accountId,
+    p_range_days: rangeDays,
+    p_timezone: timezone,
+  })
   if (error) throw error
 
-  const keys = lastNDayKeys(rangeDays)
-  const buckets = new Map<string, { incoming: number; outgoing: number }>()
-  for (const k of keys) buckets.set(k, { incoming: 0, outgoing: 0 })
-
-  for (const row of (data ?? []) as { created_at: string; sender_type: string }[]) {
-    const key = localDayKey(row.created_at)
-    const bucket = buckets.get(key)
-    if (!bucket) continue
-    if (row.sender_type === 'customer') bucket.incoming += 1
-    else bucket.outgoing += 1 // agent + bot both count as outgoing
-  }
-
-  return keys.map((day) => ({ day, ...(buckets.get(day) ?? { incoming: 0, outgoing: 0 }) }))
+  return ((data ?? []) as Array<{
+    day: string
+    incoming: number | string
+    outgoing: number | string
+  }>).map((row) => ({
+    day: row.day,
+    incoming: Number(row.incoming),
+    outgoing: Number(row.outgoing),
+  }))
 }
 
 // --- 3. Pipeline donut -------------------------------------------------
