@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const migrationPath = fileURLToPath(
   new URL(
-    '../../../supabase/migrations/20261017215349_inbox_stage_tags_and_default_pipeline.sql',
+    '../../../supabase/migrations/20261017220034_inbox_stage_tags_and_default_pipeline.sql',
     import.meta.url
   )
 );
