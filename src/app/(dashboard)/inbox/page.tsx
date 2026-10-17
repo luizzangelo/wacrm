@@ -10,7 +10,13 @@ import {
   CONVERSATION_SELECT,
   normalizeConversation,
 } from "@/lib/inbox/conversations";
-import type { Conversation, Message, Contact, ConversationStatus } from "@/types";
+import type {
+  Conversation,
+  Message,
+  Contact,
+  ConversationStatus,
+  Tag,
+} from "@/types";
 import { useRealtime } from "@/hooks/use-realtime";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
@@ -490,6 +496,30 @@ function InboxPageInner() {
     [activeConversation?.id, router]
   );
 
+  const handleContactTagsChange = useCallback(
+    (tags: Tag[]) => {
+      const contactId = activeContact?.id;
+      if (!contactId) return;
+      setActiveContact((current) => (current ? { ...current, tags } : current));
+      setActiveConversation((current) =>
+        current?.contact?.id === contactId
+          ? { ...current, contact: { ...current.contact, tags } }
+          : current
+      );
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.contact?.id === contactId
+            ? {
+                ...conversation,
+                contact: { ...conversation.contact, tags },
+              }
+            : conversation
+        )
+      );
+    },
+    [activeContact?.id]
+  );
+
   // Mobile "back" — deselect the conversation so the list pane comes
   // back. Also clears the ?c= param so a refresh lands on the list
   // instead of re-opening the thread the user just backed out of.
@@ -634,7 +664,10 @@ function InboxPageInner() {
             toggle — which is itself desktop-only — never affects it. */}
         {contactPanelOpen && (
           <div className="hidden lg:block">
-            <ContactSidebar contact={activeContact} />
+            <ContactSidebar
+              contact={activeContact}
+              onTagsChange={handleContactTagsChange}
+            />
           </div>
         )}
       </div>

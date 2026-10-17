@@ -347,7 +347,12 @@
       "deals": "Deals",
       "noTags": "No tags",
       "noDeals": "No deals",
-      "addNotePlaceholder": "Add a note..."
+      "addNotePlaceholder": "Add a note...",
+      "selectTags": "Select tags",
+      "tagUpdateError": "Could not update tags.",
+      "dealStage": "Deal stage",
+      "stageUpdated": "Stage updated.",
+      "stageUpdateError": "Could not update the stage."
     },
     "aiBanner": {
       "pausedTitle": "AI assistant is paused here",

@@ -121,6 +121,13 @@ export interface Tag {
   user_id: string;
   name: string;
   color: string;
+  standard_stage_key?:
+    | 'new_contact'
+    | 'lead'
+    | 'qualified_lead'
+    | 'disqualified_lead'
+    | 'customer'
+    | null;
   created_at: string;
 }
 
@@ -489,6 +496,7 @@ export interface PipelineStage {
   color: string;
   is_lost_stage?: boolean;
   meta_conversion_event?: MetaConversionEvent | null;
+  automatic_tag_id?: string | null;
   created_at: string;
 }
 

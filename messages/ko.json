@@ -347,7 +347,12 @@
       "deals": "딜",
       "noTags": "태그 없음",
       "noDeals": "딜 없음",
-      "addNotePlaceholder": "메모 추가..."
+      "addNotePlaceholder": "메모 추가...",
+      "selectTags": "태그 선택",
+      "tagUpdateError": "태그를 업데이트할 수 없습니다.",
+      "dealStage": "거래 단계",
+      "stageUpdated": "단계가 업데이트되었습니다.",
+      "stageUpdateError": "단계를 업데이트할 수 없습니다."
     },
     "aiBanner": {
       "pausedTitle": "이 대화에서 AI 어시스턴트가 일시 중지됨",
