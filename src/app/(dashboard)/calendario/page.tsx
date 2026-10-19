@@ -101,8 +101,8 @@ export default function CalendarioPage() {
   const [scope, setScope] = useState('mine');
   const [assignee, setAssignee] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [status, setStatus] = useState('pending');
-  const [period, setPeriod] = useState('90');
+  const [status, setStatus] = useState('all');
+  const [period, setPeriod] = useState('all');
   const [search, setSearch] = useState('');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -296,7 +296,13 @@ export default function CalendarioPage() {
           onValueChange={(value) => setScope(value ?? 'mine')}
         >
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue>
+              {scope === 'mine'
+                ? 'Minhas tarefas'
+                : scope === 'overdue'
+                  ? 'Atrasadas'
+                  : 'Todas as tarefas'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="mine">Minhas tarefas</SelectItem>
@@ -310,10 +316,15 @@ export default function CalendarioPage() {
             onValueChange={(value) => setAssignee(value ?? 'all')}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Responsável" />
+              <SelectValue placeholder="Responsável">
+                {assignee === 'all'
+                  ? 'Todos os responsáveis'
+                  : members.find((member) => member.user_id === assignee)
+                      ?.full_name || 'Usuário'}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos responsáveis</SelectItem>
+              <SelectItem value="all">Todos os responsáveis</SelectItem>
               {members.map((member) => (
                 <SelectItem key={member.user_id} value={member.user_id}>
                   {member.full_name || 'Usuário'}
@@ -327,7 +338,12 @@ export default function CalendarioPage() {
           onValueChange={(value) => setTypeFilter(value ?? 'all')}
         >
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue>
+              {typeFilter === 'all'
+                ? 'Todos os tipos'
+                : types.find((type) => type.id === typeFilter)?.name ||
+                  'Todos os tipos'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os tipos</SelectItem>
@@ -343,7 +359,13 @@ export default function CalendarioPage() {
           onValueChange={(value) => setStatus(value ?? 'pending')}
         >
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue>
+              {status === 'pending'
+                ? 'Pendentes'
+                : status === 'completed'
+                  ? 'Concluídas'
+                  : 'Todos os status'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="pending">Pendentes</SelectItem>
@@ -356,7 +378,15 @@ export default function CalendarioPage() {
           onValueChange={(value) => setPeriod(value ?? '90')}
         >
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue>
+              {period === '7'
+                ? 'Próximos 7 dias'
+                : period === '30'
+                  ? 'Próximos 30 dias'
+                  : period === '90'
+                    ? 'Próximos 90 dias'
+                    : 'Todo o período'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="7">Próximos 7 dias</SelectItem>

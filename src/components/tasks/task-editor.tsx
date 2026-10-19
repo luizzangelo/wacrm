@@ -170,7 +170,14 @@ export function TaskEditor({
                 onValueChange={(value) => setSelectedContactId(value ?? '')}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecione o contato" />
+                  <SelectValue placeholder="Selecione o contato">
+                    {contacts.find(
+                      (contact) => contact.id === selectedContactId
+                    )?.name ||
+                      contacts.find(
+                        (contact) => contact.id === selectedContactId
+                      )?.phone}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {contacts.map((contact) => (
@@ -189,7 +196,9 @@ export function TaskEditor({
               onValueChange={(value) => setTypeId(value ?? '')}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Tipo da tarefa" />
+                <SelectValue placeholder="Tipo da tarefa">
+                  {types.find((type) => type.id === typeId)?.name}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {types.map((type) => (
@@ -207,7 +216,10 @@ export function TaskEditor({
               onValueChange={(value) => setAssignedTo(value ?? '')}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Responsável" />
+                <SelectValue placeholder="Responsável">
+                  {members.find((member) => member.user_id === assignedTo)
+                    ?.full_name || 'Usuário'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {members
