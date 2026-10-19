@@ -35,16 +35,22 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { LostReasonDialog } from '@/components/pipelines/lost-reason-dialog';
+import { ContactTaskList } from '@/components/tasks/contact-task-list';
 import { format } from 'date-fns';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  conversationId?: string | null;
   onTagsChange?: (tags: Tag[]) => void;
 }
 
-export function ContactSidebar({ contact, onTagsChange }: ContactSidebarProps) {
+export function ContactSidebar({
+  contact,
+  conversationId,
+  onTagsChange,
+}: ContactSidebarProps) {
   const tSidebar = useTranslations('Inbox.sidebar');
   const tThread = useTranslations('Inbox.messageThread');
   const lossT = useTranslations('Pipelines.loss');
@@ -186,7 +192,7 @@ export function ContactSidebar({ contact, onTagsChange }: ContactSidebarProps) {
           color: tag.color,
           standard_stage_key: tag.standard_stage_key,
           created_at: tag.created_at,
-        })),
+        }))
       );
     },
     [onTagsChange]
@@ -503,6 +509,13 @@ export function ContactSidebar({ contact, onTagsChange }: ContactSidebarProps) {
               </div>
             </div>
           </div>
+
+          <div className="border-border my-4 border-t" />
+
+          <ContactTaskList
+            contactId={contact.id}
+            conversationId={conversationId}
+          />
         </div>
       </ScrollArea>
       {pendingLoss && (

@@ -196,7 +196,8 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned';
+export type NotificationType =
+  'conversation_assigned' | 'task_assigned' | 'task_due';
 
 export interface Notification {
   id: string;
@@ -206,12 +207,42 @@ export interface Notification {
   type: NotificationType;
   conversation_id?: string;
   contact_id?: string;
+  task_id?: string;
   /** Who triggered it. Null when an automation/system assigned it. */
   actor_user_id?: string;
   title: string;
   body?: string;
   read_at?: string;
   created_at: string;
+}
+
+export interface TaskType {
+  id: string;
+  account_id: string;
+  name: string;
+  icon: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface Task {
+  id: string;
+  account_id: string;
+  contact_id: string;
+  conversation_id: string | null;
+  task_type_id: string;
+  text: string;
+  due_at: string;
+  all_day: boolean;
+  assigned_to: string;
+  created_by: string;
+  completed_at: string | null;
+  completed_by: string | null;
+  result_text: string | null;
+  created_at: string;
+  updated_at: string;
+  task_type?: TaskType;
+  contact?: Contact;
 }
 
 export type SenderType = 'customer' | 'agent' | 'bot';
