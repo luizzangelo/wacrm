@@ -438,7 +438,11 @@ export function ContactSidebar({
                             aria-label={tSidebar('dealStage')}
                             className="bg-background h-6 max-w-36 border-0 px-2 text-[10px] shadow-none"
                           >
-                            <SelectValue />
+                            <SelectValue>
+                              {deal.stage.is_lost_stage
+                                ? lossT('stage')
+                                : deal.stage.name}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent align="end">
                             {stages
