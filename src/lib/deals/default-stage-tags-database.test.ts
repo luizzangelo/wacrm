@@ -11,6 +11,12 @@ const migrationPath = fileURLToPath(
     import.meta.url
   )
 );
+const preserveTagsMigrationPath = fileURLToPath(
+  new URL(
+    '../../../supabase/migrations/20261019202002_preserve_stage_tags.sql',
+    import.meta.url
+  )
+);
 
 const ACCOUNT = '10000000-0000-0000-0000-000000000001';
 const USER = '20000000-0000-0000-0000-000000000001';
@@ -107,6 +113,7 @@ describe('standard funnel and automatic stage tags', () => {
     `);
 
     await db.exec(await readFile(migrationPath, 'utf8'));
+    await db.exec(await readFile(preserveTagsMigrationPath, 'utf8'));
   });
 
   afterEach(async () => {
@@ -149,7 +156,7 @@ describe('standard funnel and automatic stage tags', () => {
     expect(tags.rows.filter((row) => row.name === 'Lead')).toHaveLength(1);
   });
 
-  it('keeps manual tags and synchronizes the lifecycle tag on stage changes', async () => {
+  it('keeps manual and previous lifecycle tags when adding the new stage tag', async () => {
     const vip = await db.query<{ id: string }>(`
       SELECT id FROM public.tags WHERE account_id = '${ACCOUNT}' AND name = 'VIP'
     `);
@@ -170,7 +177,11 @@ describe('standard funnel and automatic stage tags', () => {
       WHERE ct.contact_id = '${CONTACT}'
       ORDER BY t.name
     `);
-    expect(assigned.rows.map((row) => row.name)).toEqual(['Lead', 'VIP']);
+    expect(assigned.rows.map((row) => row.name)).toEqual([
+      'Lead',
+      'Novo Contato',
+      'VIP',
+    ]);
   });
 
   it('provisions future accounts with the standard linked funnel', async () => {
