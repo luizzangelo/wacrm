@@ -41,6 +41,12 @@ is included.
   `META_APP_SECRET`, …) is read at **runtime** from `.env.local` via
   `env_file` and is never baked into the image — safe to change with
   just a container restart.
+- Meta Ads Facebook Login reads `META_APP_ID`,
+  `META_ADS_LOGIN_CONFIG_ID`, `META_GRAPH_VERSION` and
+  `META_APP_SECRET` at **runtime**. The authenticated
+  `/api/meta-ads/status` endpoint returns only the non-secret App ID,
+  Configuration ID and Graph version needed by the browser. The App Secret
+  is never embedded in the image or returned to the client.
 
 ## Plain Docker (no Compose)
 
