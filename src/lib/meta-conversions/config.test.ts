@@ -170,6 +170,8 @@ describe('Meta Conversions configuration', () => {
     expect(repository.writes[0].patch.marketing_access_token).toBe(
       'encrypted-marketing'
     );
+    expect(repository.writes[0].patch.marketing_token_source).toBe('manual');
+    expect(repository.writes[0].patch.marketing_ad_account_id).toBeNull();
   });
 
   it('clears the Marketing API token only through the explicit action', async () => {
@@ -181,6 +183,11 @@ describe('Meta Conversions configuration', () => {
 
     expect(repository.writes[0].patch).toEqual({
       marketing_access_token: null,
+      marketing_token_source: null,
+      marketing_ad_account_id: null,
+      marketing_ad_account_name: null,
+      marketing_connected_at: null,
+      marketing_ad_accounts: null,
     });
     expect(repository.config?.marketing_access_token).toBeNull();
   });

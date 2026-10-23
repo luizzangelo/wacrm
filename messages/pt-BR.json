@@ -367,6 +367,25 @@
       "networkError": "Não foi possível acessar o servidor."
     }
   },
+  "MetaAdsConnection": {
+    "connect": "Connect Meta Ads account",
+    "description": "Read-only access to your ad accounts, used to show which campaign, ad set and ad generated each WhatsApp lead.",
+    "connected": "Connected: {name} ({id})",
+    "connectedAt": "Connected on {date}",
+    "readOnly": "Read-only access. Waba Crm never creates, edits, pauses or deletes ads.",
+    "disconnect": "Disconnect",
+    "advanced": "Advanced (manual token)",
+    "choose": "Choose the ad account to use",
+    "choosePlaceholder": "Select an ad account",
+    "cancelled": "Connection cancelled.",
+    "connectedToast": "Meta Ads account connected.",
+    "disconnectedToast": "Meta Ads account disconnected.",
+    "connectionError": "Could not connect the Meta Ads account.",
+    "disconnectError": "Could not disconnect the Meta Ads account.",
+    "permissionError": "The authorization does not include ads_read.",
+    "statusError": "Could not load the Meta Ads connection status.",
+    "notConfigured": "Facebook Login for Business is not configured in this environment."
+  },
   "MetaAdsAttribution": {
     "title": "Origem Meta Ads",
     "badge": "Meta Ads",

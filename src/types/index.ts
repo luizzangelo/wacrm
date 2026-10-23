@@ -451,6 +451,10 @@ export interface MetaConversionConfig {
   dataset_id: string | null;
   access_token: string | null;
   marketing_access_token: string | null;
+  marketing_token_source?: 'manual' | 'facebook_login' | null;
+  marketing_ad_account_id?: string | null;
+  marketing_ad_account_name?: string | null;
+  marketing_connected_at?: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;

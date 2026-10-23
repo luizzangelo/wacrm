@@ -9,6 +9,7 @@ export interface StoredMetaConversionConfig {
   dataset_id: string | null;
   access_token: string | null;
   marketing_access_token: string | null;
+  marketing_token_source?: 'manual' | 'facebook_login' | null;
   enabled: boolean;
 }
 
@@ -76,7 +77,7 @@ export function createMetaConversionsRepository(
       const { data, error } = await db
         .from('meta_conversion_config')
         .select(
-          'id, account_id, dataset_id, access_token, marketing_access_token, enabled'
+          'id, account_id, dataset_id, access_token, marketing_access_token, marketing_token_source, enabled'
         )
         .eq('account_id', accountId)
         .maybeSingle();
@@ -240,8 +241,18 @@ export async function saveMetaConversionConfig(
     write.access_token = encryptSecret(patch.access_token);
   if (patch.marketing_access_token) {
     write.marketing_access_token = encryptSecret(patch.marketing_access_token);
+    write.marketing_token_source = 'manual';
+    write.marketing_ad_account_id = null;
+    write.marketing_ad_account_name = null;
+    write.marketing_connected_at = null;
+    write.marketing_ad_accounts = null;
   } else if (patch.clear_marketing_access_token) {
     write.marketing_access_token = null;
+    write.marketing_token_source = null;
+    write.marketing_ad_account_id = null;
+    write.marketing_ad_account_name = null;
+    write.marketing_connected_at = null;
+    write.marketing_ad_accounts = null;
   }
 
   await repository.upsertConfig(accountId, write);
@@ -261,6 +272,11 @@ export async function saveMetaConversionConfig(
         : patch.marketing_access_token
           ? '__configured__'
           : (existing?.marketing_access_token ?? null),
+      marketing_token_source: patch.clear_marketing_access_token
+        ? null
+        : patch.marketing_access_token
+          ? 'manual'
+          : (existing?.marketing_token_source ?? null),
       enabled: finalEnabled,
     },
     whatsapp

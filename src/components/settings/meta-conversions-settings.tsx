@@ -28,6 +28,7 @@ import { useAuth } from '@/hooks/use-auth';
 
 import { SettingsPanelHead } from './settings-panel-head';
 import { MetaConversionEvents } from './meta-conversion-events';
+import { MetaAdsConnection } from './meta-ads-connection';
 
 interface SafeConfig {
   configured: boolean;
@@ -90,6 +91,7 @@ export function MetaConversionsSettings() {
   const [enabled, setEnabled] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [metaAdsRefreshKey, setMetaAdsRefreshKey] = useState(0);
   const loadedAccountIdRef = useRef<string | null>(null);
 
   const loadConfig = useCallback(async () => {
@@ -186,6 +188,7 @@ export function MetaConversionsSettings() {
       setClearMarketingToken(false);
       setDirty(false);
       setValidation(null);
+      setMetaAdsRefreshKey((current) => current + 1);
       toast.success(t('saveSuccess'));
     } catch {
       toast.error(t('saveFailed'));
@@ -320,46 +323,52 @@ export function MetaConversionsSettings() {
             disabled={disabled}
           />
 
-          <div className="space-y-2">
-            <SecretField
-              id="meta-marketing-access-token"
-              label={t('marketingTokenLabel')}
-              helper={t('marketingTokenHelper')}
-              configured={hasMarketingToken}
-              value={marketingToken}
-              onChange={(value) => {
-                setMarketingToken(value);
-                setClearMarketingToken(false);
-                setDirty(true);
-                setValidation(null);
-              }}
-              configuredLabel={t('configured')}
-              notConfiguredLabel={t('notConfigured')}
-              placeholder={t('tokenPlaceholder')}
-              disabled={disabled}
-            />
-            {config.has_marketing_access_token && !clearMarketingToken ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setMarketingToken('');
-                  setClearMarketingToken(true);
+          <MetaAdsConnection
+            canEdit={canEditSettings}
+            onChanged={loadConfig}
+            refreshKey={metaAdsRefreshKey}
+          >
+            <div className="space-y-2">
+              <SecretField
+                id="meta-marketing-access-token"
+                label={t('marketingTokenLabel')}
+                helper={t('marketingTokenHelper')}
+                configured={hasMarketingToken}
+                value={marketingToken}
+                onChange={(value) => {
+                  setMarketingToken(value);
+                  setClearMarketingToken(false);
                   setDirty(true);
                   setValidation(null);
                 }}
+                configuredLabel={t('configured')}
+                notConfiguredLabel={t('notConfigured')}
+                placeholder={t('tokenPlaceholder')}
                 disabled={disabled}
-              >
-                <Trash2 className="size-4" />
-                {t('removeMarketingToken')}
-              </Button>
-            ) : clearMarketingToken ? (
-              <p className="text-muted-foreground text-xs">
-                {t('marketingRemovalPending')}
-              </p>
-            ) : null}
-          </div>
+              />
+              {config.has_marketing_access_token && !clearMarketingToken ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setMarketingToken('');
+                    setClearMarketingToken(true);
+                    setDirty(true);
+                    setValidation(null);
+                  }}
+                  disabled={disabled}
+                >
+                  <Trash2 className="size-4" />
+                  {t('removeMarketingToken')}
+                </Button>
+              ) : clearMarketingToken ? (
+                <p className="text-muted-foreground text-xs">
+                  {t('marketingRemovalPending')}
+                </p>
+              ) : null}
+            </div>
+          </MetaAdsConnection>
         </CardContent>
       </Card>
 
