@@ -26,12 +26,12 @@ function AttributionLevel({
 
   return (
     <div className="border-border/60 bg-background/50 min-w-0 rounded-md border px-3 py-2">
-      <p className="text-muted-foreground text-[10px] font-medium tracking-wider uppercase">
+      <p className="text-muted-foreground text-[10px] leading-4 font-medium tracking-wider break-words uppercase">
         {label}
       </p>
       {name && (
         <p
-          className="text-foreground mt-0.5 truncate text-sm font-medium"
+          className="text-foreground mt-0.5 text-sm leading-5 font-medium [overflow-wrap:anywhere] break-words"
           title={name}
         >
           {name}
@@ -74,7 +74,7 @@ export function MetaAdsAttributionCard({
   if (!attribution) return null;
 
   return (
-    <section className="border-border bg-muted/30 space-y-3 rounded-lg border p-3">
+    <section className="border-border bg-muted/30 min-w-0 space-y-3 overflow-hidden rounded-lg border p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -101,7 +101,7 @@ export function MetaAdsAttributionCard({
       </div>
 
       {attribution.enrichment_status === 'enriched' && (
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-2">
           <AttributionLevel
             label={t('campaign')}
             name={attribution.campaign_name}

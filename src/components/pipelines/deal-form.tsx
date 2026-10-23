@@ -577,7 +577,7 @@ export function DealForm({
                   <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
                     {t('status')}
                   </p>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <Button
                       type="button"
                       onClick={() => handleStatusChange('won')}
@@ -586,7 +586,7 @@ export function DealForm({
                         deal.status === 'won' ||
                         deal.status === 'lost'
                       }
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 flex-1 disabled:opacity-50"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 h-auto w-full min-w-0 py-2 whitespace-normal disabled:opacity-50"
                     >
                       {statusAction === 'won' ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -601,7 +601,7 @@ export function DealForm({
                       type="button"
                       onClick={() => handleStatusChange('lost')}
                       disabled={!!statusAction || deal.status === 'lost'}
-                      className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                      className="h-auto w-full min-w-0 bg-red-600 py-2 whitespace-normal text-white hover:bg-red-700 disabled:opacity-50"
                     >
                       {statusAction === 'lost' ? (
                         <Loader2 className="h-4 w-4 animate-spin" />

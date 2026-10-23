@@ -285,6 +285,18 @@ describe('deal creation, contact display and deferred loss UX', () => {
     expect(screen.getByText('Renamed contact', { selector: 'p' })).toBeTruthy();
     expect(mocks.update).not.toHaveBeenCalled();
   });
+  it('keeps both status actions inside the narrow deal sidebar', async () => {
+    form(deal);
+    await screen.findByText('Current contact', { selector: 'option' });
+    const won = screen.getByRole('button', { name: 'Marcar como ganho' });
+    const lost = screen.getByRole('button', { name: 'Marcar como perdido' });
+
+    expect(won.className).toContain('w-full');
+    expect(won.className).toContain('whitespace-normal');
+    expect(lost.className).toContain('w-full');
+    expect(lost.className).toContain('whitespace-normal');
+    expect(won.parentElement?.className).toContain('grid-cols-1');
+  });
   it('intercepts edit stage selection before any mutation and cancel leaves original stage', async () => {
     form(deal);
     await screen.findByText('Current contact', { selector: 'option' });

@@ -67,6 +67,24 @@ describe('MetaAdsAttributionCard', () => {
     expect(html).toContain('Source recorded at: 09/11/2026, 09:30');
   });
 
+  it('wraps long source names instead of truncating them in narrow sidebars', () => {
+    const longName =
+      'Campanha completa de tráfego pago para moda feminina Fortaleza';
+    const html = renderToStaticMarkup(
+      <MetaAdsAttributionCard
+        attribution={attribution({
+          campaign_name: longName,
+          adset_name: longName,
+          ad_name: longName,
+        })}
+      />
+    );
+
+    expect(html).toContain(longName);
+    expect(html).not.toContain('truncate');
+    expect(html).toContain('overflow-wrap:anywhere');
+  });
+
   it('renders a pending state without inventing hierarchy names', () => {
     const html = renderToStaticMarkup(
       <MetaAdsAttributionCard
