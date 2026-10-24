@@ -65,10 +65,13 @@ describe('Meta Ads Facebook Login client', () => {
 
     await expect(
       discoverMetaAdAccounts(config, 'USER_TOKEN', fetcher as typeof fetch)
-    ).resolves.toEqual([
-      { id: '11111', name: 'Account 11111', accountStatus: 1 },
-      { id: '22222', name: 'Account 22222', accountStatus: 1 },
-    ]);
+    ).resolves.toMatchObject({
+      tokenType: 'SYSTEM_USER',
+      accounts: [
+        { id: '11111', name: 'Account 11111', accountStatus: 1 },
+        { id: '22222', name: 'Account 22222', accountStatus: 1 },
+      ],
+    });
     expect(log).toHaveBeenCalledWith(
       '[meta-ads/debug-token]',
       JSON.stringify({
@@ -106,9 +109,9 @@ describe('Meta Ads Facebook Login client', () => {
     });
     await expect(
       discoverMetaAdAccounts(config, 'USER_TOKEN', fetcher as typeof fetch)
-    ).resolves.toEqual([
-      { id: '33333', name: 'Account 33333', accountStatus: 1 },
-    ]);
+    ).resolves.toMatchObject({
+      accounts: [{ id: '33333', name: 'Account 33333', accountStatus: 1 }],
+    });
     expect(
       fetcher.mock.calls.some(([input]) =>
         new URL(String(input)).pathname.endsWith('/me/adaccounts')
@@ -159,9 +162,9 @@ describe('Meta Ads Facebook Login client', () => {
     });
     await expect(
       discoverMetaAdAccounts(config, 'USER_TOKEN', fetcher as typeof fetch)
-    ).resolves.toEqual([
-      { id: '55555', name: 'Business account', accountStatus: 1 },
-    ]);
+    ).resolves.toMatchObject({
+      accounts: [{ id: '55555', name: 'Business account', accountStatus: 1 }],
+    });
     expect(log).toHaveBeenCalledWith(
       '[meta-ads/graph-call]',
       JSON.stringify({
@@ -194,14 +197,22 @@ describe('Meta Ads Facebook Login client', () => {
         noPermissionFetcher as typeof fetch
       )
     ).rejects.toMatchObject({
-      publicCode: 'ads_read_missing',
+      publicCode: 'unsupported_token_type',
       status: 400,
     });
 
     const noAccountsFetcher = vi.fn(async (input: string | URL) => {
       const url = new URL(String(input));
       return url.pathname.endsWith('/debug_token')
-        ? json({ data: { is_valid: true, scopes: ['ads_read'] } })
+        ? json({
+            data: {
+              is_valid: true,
+              scopes: ['ads_read'],
+              granular_scopes: [
+                { scope: 'business_management', target_ids: ['44444'] },
+              ],
+            },
+          })
         : json({ data: [] });
     });
     await expect(

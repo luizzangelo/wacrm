@@ -16,10 +16,13 @@ export interface MetaAdsStoredConfig {
   marketing_ad_account_name: string | null;
   marketing_connected_at: string | null;
   marketing_ad_accounts: MetaAdAccountChoice[] | null;
+  marketing_token_expires_at: string | null;
+  marketing_data_access_expires_at: string | null;
+  marketing_token_expired_at: string | null;
 }
 
 const FIELDS =
-  'marketing_access_token,marketing_token_source,marketing_ad_account_id,marketing_ad_account_name,marketing_connected_at,marketing_ad_accounts';
+  'marketing_access_token,marketing_token_source,marketing_ad_account_id,marketing_ad_account_name,marketing_connected_at,marketing_ad_accounts,marketing_token_expires_at,marketing_data_access_expires_at,marketing_token_expired_at';
 
 async function readConfig(
   db: SupabaseClient,
@@ -51,6 +54,20 @@ export function safeMetaAdsStatus(config: MetaAdsStoredConfig | null) {
     config.marketing_token_source === 'facebook_login' &&
     config.marketing_ad_account_id
   );
+  const expirations = [
+    config?.marketing_token_expires_at,
+    config?.marketing_data_access_expires_at,
+  ].filter((value): value is string => Boolean(value));
+  const expiresAt = expirations.sort()[0] ?? null;
+  const expired = Boolean(
+    config?.marketing_token_expired_at ||
+    (expiresAt && new Date(expiresAt).getTime() <= Date.now())
+  );
+  const needsReconnect = Boolean(
+    expired ||
+    (expiresAt &&
+      new Date(expiresAt).getTime() - Date.now() <= 7 * 24 * 60 * 60 * 1_000)
+  );
   return {
     connected,
     source: config?.marketing_token_source ?? null,
@@ -61,6 +78,9 @@ export function safeMetaAdsStatus(config: MetaAdsStoredConfig | null) {
         }
       : null,
     connectedAt: connected ? config!.marketing_connected_at : null,
+    expiresAt: connected ? expiresAt : null,
+    expired: connected ? expired : false,
+    needsReconnect: connected ? needsReconnect : false,
   };
 }
 
@@ -77,7 +97,8 @@ export async function connectMetaAds(
   if (input.code) {
     const serverConfig = getMetaAdsServerConfig();
     const token = await exchangeMetaAdsCode(serverConfig, input.code);
-    const accounts = await discoverMetaAdAccounts(serverConfig, token);
+    const discovery = await discoverMetaAdAccounts(serverConfig, token);
+    const accounts = discovery.accounts;
     const selected = accounts.length === 1 ? accounts[0] : null;
     await writeConfig(db, accountId, {
       marketing_access_token: encrypt(token),
@@ -86,6 +107,9 @@ export async function connectMetaAds(
       marketing_ad_account_id: selected?.id ?? null,
       marketing_ad_account_name: selected?.name ?? null,
       marketing_connected_at: selected ? now : null,
+      marketing_token_expires_at: discovery.expiresAt,
+      marketing_data_access_expires_at: discovery.dataAccessExpiresAt,
+      marketing_token_expired_at: null,
     });
     return selected
       ? safeMetaAdsStatus({
@@ -95,6 +119,9 @@ export async function connectMetaAds(
           marketing_ad_account_name: selected.name,
           marketing_connected_at: now,
           marketing_ad_accounts: accounts,
+          marketing_token_expires_at: discovery.expiresAt,
+          marketing_data_access_expires_at: discovery.dataAccessExpiresAt,
+          marketing_token_expired_at: null,
         })
       : {
           connected: false,
@@ -158,5 +185,8 @@ export async function disconnectMetaAds(db: SupabaseClient, accountId: string) {
     marketing_ad_account_name: null,
     marketing_connected_at: null,
     marketing_ad_accounts: null,
+    marketing_token_expires_at: null,
+    marketing_data_access_expires_at: null,
+    marketing_token_expired_at: null,
   });
 }

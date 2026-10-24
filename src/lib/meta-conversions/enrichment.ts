@@ -29,6 +29,7 @@ export interface StoredMetaEnrichmentConfig {
   account_id: string;
   access_token: string | null;
   marketing_access_token: string | null;
+  marketing_token_source: 'manual' | 'facebook_login' | null;
   enabled: boolean;
 }
 
@@ -54,6 +55,7 @@ export interface MetaEnrichmentRepository {
     attributionId: string,
     error: string
   ): Promise<void>;
+  markConnectionExpired(accountId: string, expiredAt: string): Promise<void>;
   listCandidates(limit: number): Promise<MetaEnrichmentCandidate[]>;
 }
 
@@ -129,7 +131,9 @@ export function createMetaEnrichmentRepository(
     async getConfig(accountId) {
       const { data, error } = await db
         .from('meta_conversion_config')
-        .select('account_id,access_token,marketing_access_token,enabled')
+        .select(
+          'account_id,access_token,marketing_access_token,marketing_token_source,enabled'
+        )
         .eq('account_id', accountId)
         .maybeSingle();
       assertDatabaseResult('get_config', error);
@@ -165,6 +169,15 @@ export function createMetaEnrichmentRepository(
         .select('id')
         .maybeSingle();
       assertDatabaseResult('mark_failed', error, data);
+    },
+
+    async markConnectionExpired(accountId, expiredAt) {
+      const { error } = await db
+        .from('meta_conversion_config')
+        .update({ marketing_token_expired_at: expiredAt })
+        .eq('account_id', accountId)
+        .eq('marketing_token_source', 'facebook_login');
+      assertDatabaseResult('mark_connection_expired', error);
     },
 
     async listCandidates(limit) {
@@ -290,6 +303,12 @@ export async function enrichMetaAdAttribution(options: {
     hierarchy = await readHierarchy(adId, accessToken);
   } catch (error) {
     const details = safeFailureDetails(error);
+    if (
+      details.code === 190 &&
+      config?.marketing_token_source === 'facebook_login'
+    ) {
+      await repository.markConnectionExpired(accountId, now().toISOString());
+    }
     await repository.markFailed(
       accountId,
       attributionId,

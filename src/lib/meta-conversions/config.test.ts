@@ -188,6 +188,9 @@ describe('Meta Conversions configuration', () => {
       marketing_ad_account_name: null,
       marketing_connected_at: null,
       marketing_ad_accounts: null,
+      marketing_token_expires_at: null,
+      marketing_data_access_expires_at: null,
+      marketing_token_expired_at: null,
     });
     expect(repository.config?.marketing_access_token).toBeNull();
   });

@@ -14,6 +14,9 @@ interface Status {
   source: 'manual' | 'facebook_login' | null;
   adAccount: { id: string; name: string | null } | null;
   connectedAt: string | null;
+  expiresAt: string | null;
+  expired: boolean;
+  needsReconnect: boolean;
   sdkConfig: { appId: string; configId: string; version: string } | null;
 }
 
@@ -87,9 +90,11 @@ export function MetaAdsConnection({
       toast.error(
         errorCode === 'ads_read_missing'
           ? t('permissionError')
-          : errorCode === 'no_ad_accounts'
-            ? t('noAccountsError')
-            : t('connectionError')
+          : errorCode === 'unsupported_token_type'
+            ? t('unsupportedTokenError')
+            : errorCode === 'no_ad_accounts'
+              ? t('noAccountsError')
+              : t('connectionError')
       );
     } finally {
       setBusy(false);
@@ -184,6 +189,21 @@ export function MetaAdsConnection({
               </div>
             </div>
             <p className="text-muted-foreground text-xs">{t('readOnly')}</p>
+            {status.needsReconnect ? (
+              <div className="space-y-2">
+                <p className="text-destructive text-sm font-medium">
+                  {t('expired')}
+                </p>
+                <Button
+                  type="button"
+                  onClick={connect}
+                  disabled={!canEdit || busy || !status.sdkConfig}
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {t('connect')}
+                </Button>
+              </div>
+            ) : null}
             <Button
               type="button"
               variant="outline"

@@ -383,7 +383,9 @@
     "connectionError": "Could not connect the Meta Ads account.",
     "disconnectError": "Could not disconnect the Meta Ads account.",
     "permissionError": "A permissão ads_read não foi concedida.",
+    "unsupportedTokenError": "Não foi possível listar contas de anúncios com este tipo de token.",
     "noAccountsError": "Nenhuma conta de anúncios acessível foi encontrada.",
+    "expired": "Connection expired, reconnect",
     "statusError": "Could not load the Meta Ads connection status.",
     "notConfigured": "Facebook Login for Business is not configured in this environment."
   },

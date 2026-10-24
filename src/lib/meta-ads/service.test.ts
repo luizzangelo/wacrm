@@ -13,12 +13,18 @@ describe('Meta Ads safe status', () => {
       marketing_ad_accounts: [
         { id: '12345', name: 'Main account', accountStatus: 1 },
       ],
+      marketing_token_expires_at: null,
+      marketing_data_access_expires_at: null,
+      marketing_token_expired_at: null,
     });
     expect(status).toEqual({
       connected: true,
       source: 'facebook_login',
       adAccount: { id: 'act_12345', name: 'Main account' },
       connectedAt: '2026-10-23T12:00:00.000Z',
+      expiresAt: null,
+      expired: false,
+      needsReconnect: false,
     });
     expect(JSON.stringify(status)).not.toContain('encrypted-secret');
   });
@@ -32,6 +38,9 @@ describe('Meta Ads safe status', () => {
         marketing_ad_account_name: null,
         marketing_connected_at: null,
         marketing_ad_accounts: null,
+        marketing_token_expires_at: null,
+        marketing_data_access_expires_at: null,
+        marketing_token_expired_at: null,
       }).connected
     ).toBe(false);
   });

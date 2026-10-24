@@ -21,6 +21,20 @@ interface LoggedGraphResult {
   ok: boolean;
   status: number | null;
   payload: Record<string, unknown> | null;
+  error: {
+    code: number | null;
+    error_subcode: number | null;
+    message: string;
+  } | null;
+}
+
+export interface MetaAdsDiscoveryResult {
+  accounts: MetaAdAccountChoice[];
+  tokenType: string | null;
+  scopes: string[];
+  granularScopes: DebugScope[];
+  expiresAt: string | null;
+  dataAccessExpiresAt: string | null;
 }
 
 export class MetaAdsApiError extends Error {
@@ -132,7 +146,7 @@ async function loggedGraphJson(
       error: { code: null, error_subcode: null, message: 'network_error' },
     };
     console.info('[meta-ads/graph-call]', JSON.stringify(logEntry));
-    return { ok: false, status: null, payload: null };
+    return { ok: false, status: null, payload: null, error: logEntry.error };
   }
   const payload = (await response.json().catch(() => null)) as Record<
     string,
@@ -162,7 +176,15 @@ async function loggedGraphJson(
     ok: response.ok && Boolean(payload),
     status: response.status,
     payload,
+    error,
   };
+}
+
+function timestampIso(value: unknown): string | null {
+  const seconds = numberValue(value);
+  if (!seconds || seconds <= 0) return null;
+  const date = new Date(seconds * 1_000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 export async function exchangeMetaAdsCode(
@@ -219,7 +241,7 @@ export async function discoverMetaAdAccounts(
   config: MetaAdsServerConfig,
   token: string,
   fetcher: typeof fetch = fetch
-): Promise<MetaAdAccountChoice[]> {
+): Promise<MetaAdsDiscoveryResult> {
   const debugUrl = new URL(
     `https://graph.facebook.com/${config.graphVersion}/debug_token`
   );
@@ -245,8 +267,20 @@ export async function discoverMetaAdAccounts(
     })),
   };
   console.info('[meta-ads/debug-token]', JSON.stringify(debugLog));
+  const metadata = {
+    tokenType: debugLog.type,
+    scopes,
+    granularScopes,
+    expiresAt: timestampIso(data.expires_at),
+    dataAccessExpiresAt: timestampIso(data.data_access_expires_at),
+  };
+  const adsReadDeclared =
+    scopes.includes('ads_read') ||
+    granularScopes.some(({ scope }) => scope === 'ads_read');
   let successfulDiscoveryCall = false;
   let discoveredCandidate = false;
+  let unsupportedTokenType = false;
+  let emptyBusinesses = false;
 
   async function acceptRoute(
     route: 'me_adaccounts' | 'business_accounts',
@@ -291,8 +325,15 @@ export async function discoverMetaAdAccounts(
         ])
       )
     );
-    if (directAccounts) return directAccounts;
+    if (directAccounts) return { accounts: directAccounts, ...metadata };
   }
+  unsupportedTokenType ||= directResult.error?.code === 100;
+
+  const granularAdAccounts = await acceptRoute(
+    'me_adaccounts',
+    granularScopes.find(({ scope }) => scope === 'ads_read')?.targetIds ?? []
+  );
+  if (granularAdAccounts) return { accounts: granularAdAccounts, ...metadata };
 
   let businessIds = granularScopes.find(
     (scope) => scope.scope === 'business_management'
@@ -314,6 +355,7 @@ export async function discoverMetaAdAccounts(
         businessIds = uniqueIds(
           records(result.payload).map((business) => business.id)
         );
+        emptyBusinesses = businessIds.length === 0;
       } else {
         businessIds = [];
       }
@@ -356,12 +398,14 @@ export async function discoverMetaAdAccounts(
     'business_accounts',
     uniqueIds(businessAccountIds)
   );
-  if (businessAccounts) return businessAccounts;
+  if (businessAccounts) return { accounts: businessAccounts, ...metadata };
 
   throw new MetaAdsApiError(
-    successfulDiscoveryCall && !discoveredCandidate
-      ? 'no_ad_accounts'
-      : 'ads_read_missing',
+    unsupportedTokenType || emptyBusinesses
+      ? 'unsupported_token_type'
+      : adsReadDeclared || (successfulDiscoveryCall && !discoveredCandidate)
+        ? 'no_ad_accounts'
+        : 'ads_read_missing',
     400
   );
 }

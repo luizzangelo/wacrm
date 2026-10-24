@@ -455,6 +455,9 @@ export interface MetaConversionConfig {
   marketing_ad_account_id?: string | null;
   marketing_ad_account_name?: string | null;
   marketing_connected_at?: string | null;
+  marketing_token_expires_at?: string | null;
+  marketing_data_access_expires_at?: string | null;
+  marketing_token_expired_at?: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;

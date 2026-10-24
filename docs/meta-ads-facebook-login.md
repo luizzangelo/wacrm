@@ -12,7 +12,7 @@ Runtime, server-side:
 - `META_APP_ID`: non-secret Meta App ID.
 - `META_ADS_LOGIN_CONFIG_ID`: non-secret Facebook Login for Business
   Configuration ID with `ads_read`, `business_management`, and Ad accounts
-  enabled.
+  enabled. Production currently uses `2166909448043949`.
 - `META_GRAPH_VERSION`: Graph API version; defaults to `v21.0`.
 - `META_APP_SECRET`: secret mounted only in the server container. Never prefix
   it with `NEXT_PUBLIC_`.
@@ -24,9 +24,16 @@ settings used by WhatsApp Embedded Signup and are independent of this flow.
 
 ## Database
 
-Apply `20261023182249_meta_ads_facebook_login.sql`. It adds connection metadata
-to `meta_conversion_config` and classifies existing Marketing API tokens as
-`manual`; it does not replace or decrypt them.
+Apply `20261023182249_meta_ads_facebook_login.sql` and
+`20261024175340_meta_ads_token_expiration.sql`. They add connection metadata
+to `meta_conversion_config`, classify existing Marketing API tokens as
+`manual`, and persist token/data-access expiry timestamps. They do not replace
+or decrypt tokens.
+
+The authenticated status endpoint warns when the effective expiry is within
+seven days or has passed. A Marketing API error code `190` marks a Facebook
+Login connection expired while attribution enrichment remains failure-tolerant
+and does not interrupt WhatsApp inbound persistence.
 
 ## Local test
 

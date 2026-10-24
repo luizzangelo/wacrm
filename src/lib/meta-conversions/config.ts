@@ -246,6 +246,9 @@ export async function saveMetaConversionConfig(
     write.marketing_ad_account_name = null;
     write.marketing_connected_at = null;
     write.marketing_ad_accounts = null;
+    write.marketing_token_expires_at = null;
+    write.marketing_data_access_expires_at = null;
+    write.marketing_token_expired_at = null;
   } else if (patch.clear_marketing_access_token) {
     write.marketing_access_token = null;
     write.marketing_token_source = null;
@@ -253,6 +256,9 @@ export async function saveMetaConversionConfig(
     write.marketing_ad_account_name = null;
     write.marketing_connected_at = null;
     write.marketing_ad_accounts = null;
+    write.marketing_token_expires_at = null;
+    write.marketing_data_access_expires_at = null;
+    write.marketing_token_expired_at = null;
   }
 
   await repository.upsertConfig(accountId, write);
