@@ -51,7 +51,7 @@ describe('Meta Ads Facebook Login client', () => {
     await expect(
       exchangeMetaAdsCode(config, 'ONE_TIME_CODE', fetcher as typeof fetch)
     ).rejects.toMatchObject({
-      publicCode: 'code_exchange_failed',
+      publicCode: 'redirect_uri_mismatch',
       metaCode: 100,
       metaSubcode: 36008,
     });
@@ -198,6 +198,7 @@ describe('Meta Ads Facebook Login client', () => {
         error: {
           code: 100,
           error_subcode: 33,
+          type: null,
           message: 'Unsupported get request.',
         },
       })

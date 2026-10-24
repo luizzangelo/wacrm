@@ -1,7 +1,7 @@
 'use client';
 
 import Script from 'next/script';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, Loader2, Unplug } from 'lucide-react';
 import { useFormatter, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -42,6 +42,8 @@ export function MetaAdsConnection({
   const [choices, setChoices] = useState<Choice[]>([]);
   const [busy, setBusy] = useState(false);
   const [sdkReady, setSdkReady] = useState(false);
+  const loginInFlight = useRef(false);
+  const postInFlight = useRef(false);
 
   const load = useCallback(async () => {
     const response = await fetch('/api/meta-ads/status', { cache: 'no-store' });
@@ -64,6 +66,8 @@ export function MetaAdsConnection({
   }, [status?.sdkConfig]);
 
   async function finish(body: Record<string, string>) {
+    if (postInFlight.current) return;
+    postInFlight.current = true;
     setBusy(true);
     try {
       const response = await fetch('/api/meta-ads/connect', {
@@ -73,10 +77,20 @@ export function MetaAdsConnection({
       });
       const payload = (await response.json()) as Status & {
         error?: string;
+        metaCode?: number | null;
+        metaSubcode?: number | null;
         requiresSelection?: boolean;
         adAccounts?: Choice[];
       };
-      if (!response.ok) throw new Error(payload.error ?? 'connection_failed');
+      if (!response.ok) {
+        throw new Error(
+          [
+            payload.error ?? 'connection_failed',
+            payload.metaCode ?? '',
+            payload.metaSubcode ?? '',
+          ].join('|')
+        );
+      }
       if (payload.requiresSelection) {
         setChoices(payload.adAccounts ?? []);
         return;
@@ -86,37 +100,53 @@ export function MetaAdsConnection({
       await onChanged();
       toast.success(t('connectedToast'));
     } catch (error) {
-      const errorCode = error instanceof Error ? error.message : '';
+      const [errorCode, metaCode, metaSubcode] =
+        error instanceof Error ? error.message.split('|') : [''];
       toast.error(
         errorCode === 'ads_read_missing'
           ? t('permissionError')
-          : errorCode === 'code_exchange_failed'
-            ? t('codeExchangeError')
-            : errorCode === 'token_validation_failed'
-              ? t('tokenValidationError')
-              : errorCode === 'ad_account_listing_failed'
-                ? t('accountListingError')
-                : errorCode === 'ad_account_proof_failed'
-                  ? t('accountProofError')
-                  : errorCode === 'unsupported_token_type'
-                    ? t('unsupportedTokenError')
-                    : errorCode === 'no_ad_accounts'
-                      ? t('noAccountsError')
-                      : t('connectionError')
+          : errorCode === 'authorization_code_expired_or_used'
+            ? t('codeExpiredError')
+            : errorCode === 'app_secret_invalid'
+              ? t('appSecretError')
+              : errorCode === 'redirect_uri_mismatch'
+                ? t('redirectUriError')
+                : errorCode === 'code_exchange_failed'
+                  ? t('codeExchangeError')
+                  : errorCode === 'token_validation_failed'
+                    ? t('tokenValidationError')
+                    : errorCode === 'ad_account_listing_failed'
+                      ? t('accountListingError')
+                      : errorCode === 'ad_account_proof_failed'
+                        ? t('accountProofError')
+                        : errorCode === 'unsupported_token_type'
+                          ? t('unsupportedTokenError')
+                          : errorCode === 'no_ad_accounts'
+                            ? t('noAccountsError')
+                            : errorCode === 'code_exchange_failed' && metaCode
+                              ? t('otherMetaError', {
+                                  code: metaCode,
+                                  subcode: metaSubcode || '-',
+                                })
+                              : t('connectionError')
       );
     } finally {
+      postInFlight.current = false;
       setBusy(false);
     }
   }
 
   function connect() {
+    if (loginInFlight.current || postInFlight.current || busy) return;
     if (!window.FB || !sdkReady || !status?.sdkConfig) {
       toast.error(t('notConfigured'));
       return;
     }
     setBusy(true);
+    loginInFlight.current = true;
     window.FB.login(
       (response) => {
+        loginInFlight.current = false;
         const code = response.authResponse?.code;
         if (!code) {
           setBusy(false);

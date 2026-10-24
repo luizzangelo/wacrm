@@ -24,6 +24,7 @@ interface LoggedGraphResult {
   error: {
     code: number | null;
     error_subcode: number | null;
+    type?: string | null;
     message: string;
   } | null;
 }
@@ -42,7 +43,9 @@ export class MetaAdsApiError extends Error {
     readonly publicCode: string,
     readonly status = 502,
     readonly metaCode?: number,
-    readonly metaSubcode?: number
+    readonly metaSubcode?: number,
+    readonly metaType?: string,
+    readonly metaMessage?: string
   ) {
     super(publicCode);
     this.name = 'MetaAdsApiError';
@@ -125,6 +128,7 @@ async function graphJson(
         error: {
           code: numberValue(error?.code) ?? null,
           error_subcode: numberValue(error?.error_subcode) ?? null,
+          type: typeof error?.type === 'string' ? error.type : null,
           message:
             typeof error?.message === 'string'
               ? error.message
@@ -136,7 +140,9 @@ async function graphJson(
       'meta_request_failed',
       502,
       numberValue(error?.code),
-      numberValue(error?.error_subcode)
+      numberValue(error?.error_subcode),
+      typeof error?.type === 'string' ? error.type : undefined,
+      typeof error?.message === 'string' ? error.message : undefined
     );
   }
   return payload;
@@ -175,6 +181,7 @@ async function loggedGraphJson(
       ? {
           code: numberValue(rawError?.code) ?? null,
           error_subcode: numberValue(rawError?.error_subcode) ?? null,
+          type: typeof rawError?.type === 'string' ? rawError.type : null,
           message:
             typeof rawError?.message === 'string'
               ? rawError.message
@@ -225,11 +232,24 @@ export async function exchangeMetaAdsCode(
     );
   } catch (error) {
     if (error instanceof MetaAdsApiError) {
+      const message = error.metaMessage?.toLowerCase() ?? '';
+      const publicCode =
+        error.metaSubcode === 36008
+          ? 'redirect_uri_mismatch'
+          : message.includes('already been used') ||
+              message.includes('expired') ||
+              message.includes('verification code')
+            ? 'authorization_code_expired_or_used'
+            : message.includes('app secret') ||
+                message.includes('client secret')
+              ? 'app_secret_invalid'
+              : 'code_exchange_failed';
       throw new MetaAdsApiError(
-        'code_exchange_failed',
+        publicCode,
         error.status,
         error.metaCode,
-        error.metaSubcode
+        error.metaSubcode,
+        error.metaType
       );
     }
     throw error;
