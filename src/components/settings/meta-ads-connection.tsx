@@ -90,11 +90,19 @@ export function MetaAdsConnection({
       toast.error(
         errorCode === 'ads_read_missing'
           ? t('permissionError')
-          : errorCode === 'unsupported_token_type'
-            ? t('unsupportedTokenError')
-            : errorCode === 'no_ad_accounts'
-              ? t('noAccountsError')
-              : t('connectionError')
+          : errorCode === 'code_exchange_failed'
+            ? t('codeExchangeError')
+            : errorCode === 'token_validation_failed'
+              ? t('tokenValidationError')
+              : errorCode === 'ad_account_listing_failed'
+                ? t('accountListingError')
+                : errorCode === 'ad_account_proof_failed'
+                  ? t('accountProofError')
+                  : errorCode === 'unsupported_token_type'
+                    ? t('unsupportedTokenError')
+                    : errorCode === 'no_ad_accounts'
+                      ? t('noAccountsError')
+                      : t('connectionError')
       );
     } finally {
       setBusy(false);

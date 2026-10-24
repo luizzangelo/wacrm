@@ -33,6 +33,30 @@ describe('Meta Ads Facebook Login client', () => {
     expect(url.searchParams.has('redirect_uri')).toBe(false);
   });
 
+  it('classifies an authorization code exchange failure by stage', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const fetcher = vi.fn(async () =>
+      json(
+        {
+          error: {
+            code: 100,
+            error_subcode: 36008,
+            message: 'Authorization code rejected',
+          },
+        },
+        400
+      )
+    );
+
+    await expect(
+      exchangeMetaAdsCode(config, 'ONE_TIME_CODE', fetcher as typeof fetch)
+    ).rejects.toMatchObject({
+      publicCode: 'code_exchange_failed',
+      metaCode: 100,
+      metaSubcode: 36008,
+    });
+  });
+
   it('accepts a SYSTEM_USER token by practical account access without ads_read in scopes', async () => {
     const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -225,5 +249,29 @@ describe('Meta Ads Facebook Login client', () => {
       publicCode: 'no_ad_accounts',
       status: 400,
     });
+  });
+
+  it('classifies a failed practical account proof by stage', async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/debug_token')) {
+        return json({ data: { is_valid: true, scopes: ['ads_read'] } });
+      }
+      if (url.pathname.endsWith('/me/adaccounts')) {
+        return json({ data: [{ account_id: '77777' }] });
+      }
+      if (url.pathname.endsWith('/act_77777')) {
+        return json(
+          { error: { code: 200, message: 'Permissions error' } },
+          403
+        );
+      }
+      if (url.pathname.endsWith('/me/businesses')) return json({ data: [] });
+      throw new Error(`Unexpected URL: ${url.pathname}`);
+    });
+
+    await expect(
+      discoverMetaAdAccounts(config, 'USER_TOKEN', fetcher as typeof fetch)
+    ).rejects.toMatchObject({ publicCode: 'ad_account_proof_failed' });
   });
 });

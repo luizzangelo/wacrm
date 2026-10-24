@@ -95,6 +95,7 @@ function records(payload: Record<string, unknown>): Record<string, unknown>[] {
 }
 
 async function graphJson(
+  endpoint: string,
   url: URL,
   init: RequestInit,
   fetcher: typeof fetch
@@ -115,6 +116,22 @@ async function graphJson(
   > | null;
   if (!response.ok || !payload) {
     const error = payload?.error as Record<string, unknown> | undefined;
+    console.info(
+      '[meta-ads/graph-call]',
+      JSON.stringify({
+        endpoint,
+        http_status: response.status,
+        data_count: null,
+        error: {
+          code: numberValue(error?.code) ?? null,
+          error_subcode: numberValue(error?.error_subcode) ?? null,
+          message:
+            typeof error?.message === 'string'
+              ? error.message
+              : 'invalid_meta_response',
+        },
+      })
+    );
     throw new MetaAdsApiError(
       'meta_request_failed',
       502,
@@ -198,7 +215,25 @@ export async function exchangeMetaAdsCode(
   url.searchParams.set('client_id', config.appId);
   url.searchParams.set('client_secret', config.appSecret);
   url.searchParams.set('code', code);
-  const payload = await graphJson(url, { method: 'GET' }, fetcher);
+  let payload: Record<string, unknown>;
+  try {
+    payload = await graphJson(
+      '/oauth/access_token',
+      url,
+      { method: 'GET' },
+      fetcher
+    );
+  } catch (error) {
+    if (error instanceof MetaAdsApiError) {
+      throw new MetaAdsApiError(
+        'code_exchange_failed',
+        error.status,
+        error.metaCode,
+        error.metaSubcode
+      );
+    }
+    throw error;
+  }
   if (typeof payload.access_token !== 'string' || !payload.access_token) {
     throw new MetaAdsApiError('token_exchange_invalid');
   }
@@ -250,7 +285,25 @@ export async function discoverMetaAdAccounts(
     'access_token',
     `${config.appId}|${config.appSecret}`
   );
-  const debug = await graphJson(debugUrl, { method: 'GET' }, fetcher);
+  let debug: Record<string, unknown>;
+  try {
+    debug = await graphJson(
+      '/debug_token',
+      debugUrl,
+      { method: 'GET' },
+      fetcher
+    );
+  } catch (error) {
+    if (error instanceof MetaAdsApiError) {
+      throw new MetaAdsApiError(
+        'token_validation_failed',
+        error.status,
+        error.metaCode,
+        error.metaSubcode
+      );
+    }
+    throw error;
+  }
   const data = debug.data as Record<string, unknown> | undefined;
   if (data?.is_valid !== true)
     throw new MetaAdsApiError('invalid_access_token', 400);
@@ -281,6 +334,8 @@ export async function discoverMetaAdAccounts(
   let discoveredCandidate = false;
   let unsupportedTokenType = false;
   let emptyBusinesses = false;
+  let proofAttempted = false;
+  let listingFailed = false;
 
   async function acceptRoute(
     route: 'me_adaccounts' | 'business_accounts',
@@ -288,6 +343,7 @@ export async function discoverMetaAdAccounts(
   ) {
     if (!candidateIds.length) return null;
     discoveredCandidate = true;
+    proofAttempted = true;
     const accessibleAccounts = await readAccessibleAccounts(
       config,
       token,
@@ -328,6 +384,8 @@ export async function discoverMetaAdAccounts(
     if (directAccounts) return { accounts: directAccounts, ...metadata };
   }
   unsupportedTokenType ||= directResult.error?.code === 100;
+  listingFailed ||=
+    !directResult.ok && ![10, 100, 200].includes(directResult.error?.code ?? 0);
 
   const granularAdAccounts = await acceptRoute(
     'me_adaccounts',
@@ -357,6 +415,7 @@ export async function discoverMetaAdAccounts(
         );
         emptyBusinesses = businessIds.length === 0;
       } else {
+        listingFailed = true;
         businessIds = [];
       }
     } catch {
@@ -401,11 +460,15 @@ export async function discoverMetaAdAccounts(
   if (businessAccounts) return { accounts: businessAccounts, ...metadata };
 
   throw new MetaAdsApiError(
-    unsupportedTokenType || emptyBusinesses
-      ? 'unsupported_token_type'
-      : adsReadDeclared || (successfulDiscoveryCall && !discoveredCandidate)
-        ? 'no_ad_accounts'
-        : 'ads_read_missing',
+    proofAttempted
+      ? 'ad_account_proof_failed'
+      : unsupportedTokenType || emptyBusinesses
+        ? 'unsupported_token_type'
+        : listingFailed
+          ? 'ad_account_listing_failed'
+          : adsReadDeclared || (successfulDiscoveryCall && !discoveredCandidate)
+            ? 'no_ad_accounts'
+            : 'ads_read_missing',
     400
   );
 }
@@ -419,6 +482,7 @@ export async function revokeMetaAdsToken(
     `https://graph.facebook.com/${config.graphVersion}/me/permissions`
   );
   await graphJson(
+    '/me/permissions',
     url,
     { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
     fetcher
