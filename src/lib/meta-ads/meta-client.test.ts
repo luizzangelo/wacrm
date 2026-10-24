@@ -33,7 +33,7 @@ describe('Meta Ads Facebook Login client', () => {
     expect(url.searchParams.has('redirect_uri')).toBe(false);
   });
 
-  it('uses only ads_read target_ids and reads each account without exposing the token in its URL', async () => {
+  it('accepts a SYSTEM_USER token by practical account access without ads_read in scopes', async () => {
     const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const fetcher = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -41,10 +41,18 @@ describe('Meta Ads Facebook Login client', () => {
         return json({
           data: {
             is_valid: true,
-            granular_scopes: [
-              { scope: 'ads_read', target_ids: ['11111', '22222'] },
-            ],
+            type: 'SYSTEM_USER',
+            scopes: ['business_management'],
+            granular_scopes: [{ scope: 'business_management', target_ids: [] }],
           },
+        });
+      }
+      if (url.pathname.endsWith('/me/adaccounts')) {
+        return json({
+          data: [
+            { id: 'act_11111', account_id: '11111' },
+            { id: 'act_22222', account_id: '22222' },
+          ],
         });
       }
       const id = url.pathname.endsWith('act_11111') ? '11111' : '22222';
@@ -61,13 +69,16 @@ describe('Meta Ads Facebook Login client', () => {
       { id: '11111', name: 'Account 11111', accountStatus: 1 },
       { id: '22222', name: 'Account 22222', accountStatus: 1 },
     ]);
-    expect(log).toHaveBeenCalledWith('[meta-ads/debug-token]', {
-      type: null,
-      scopes: [],
-      granular_scopes: [{ scope: 'ads_read', target_ids: ['11111', '22222'] }],
-    });
+    expect(log).toHaveBeenCalledWith(
+      '[meta-ads/debug-token]',
+      JSON.stringify({
+        type: 'SYSTEM_USER',
+        scopes: ['business_management'],
+        granular_scopes: [{ scope: 'business_management', target_ids: [] }],
+      })
+    );
     expect(log).toHaveBeenCalledWith('[meta-ads/account-discovery]', {
-      route: 'granular_scopes',
+      route: 'me_adaccounts',
       candidates: 2,
       accessible: 2,
     });
@@ -106,6 +117,7 @@ describe('Meta Ads Facebook Login client', () => {
   });
 
   it('falls back through business ad-account edges and proves practical access', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const fetcher = vi.fn(async (input: string | URL) => {
       const url = new URL(String(input));
       if (url.pathname.endsWith('/debug_token')) {
@@ -117,6 +129,18 @@ describe('Meta Ads Facebook Login client', () => {
             ],
           },
         });
+      }
+      if (url.pathname.endsWith('/me/adaccounts')) {
+        return json(
+          {
+            error: {
+              code: 100,
+              error_subcode: 33,
+              message: 'Unsupported get request.',
+            },
+          },
+          400
+        );
       }
       if (url.pathname.endsWith('/44444/owned_ad_accounts')) {
         return json({ data: [{ id: 'act_55555' }] });
@@ -138,6 +162,20 @@ describe('Meta Ads Facebook Login client', () => {
     ).resolves.toEqual([
       { id: '55555', name: 'Business account', accountStatus: 1 },
     ]);
+    expect(log).toHaveBeenCalledWith(
+      '[meta-ads/graph-call]',
+      JSON.stringify({
+        endpoint: '/me/adaccounts',
+        http_status: 400,
+        data_count: null,
+        error: {
+          code: 100,
+          error_subcode: 33,
+          message: 'Unsupported get request.',
+        },
+      })
+    );
+    log.mockRestore();
   });
 
   it('distinguishes a missing ads_read grant from no accessible accounts', async () => {

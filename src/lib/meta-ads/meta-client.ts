@@ -17,6 +17,12 @@ interface DebugScope {
   targetIds: string[];
 }
 
+interface LoggedGraphResult {
+  ok: boolean;
+  status: number | null;
+  payload: Record<string, unknown> | null;
+}
+
 export class MetaAdsApiError extends Error {
   constructor(
     readonly publicCode: string,
@@ -105,6 +111,60 @@ async function graphJson(
   return payload;
 }
 
+async function loggedGraphJson(
+  endpoint: string,
+  url: URL,
+  init: RequestInit,
+  fetcher: typeof fetch
+): Promise<LoggedGraphResult> {
+  let response: Response;
+  try {
+    response = await fetcher(url, {
+      ...init,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch {
+    const logEntry = {
+      endpoint,
+      http_status: null,
+      data_count: null,
+      error: { code: null, error_subcode: null, message: 'network_error' },
+    };
+    console.info('[meta-ads/graph-call]', JSON.stringify(logEntry));
+    return { ok: false, status: null, payload: null };
+  }
+  const payload = (await response.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  const rawError = payload?.error as Record<string, unknown> | undefined;
+  const error =
+    !response.ok || !payload
+      ? {
+          code: numberValue(rawError?.code) ?? null,
+          error_subcode: numberValue(rawError?.error_subcode) ?? null,
+          message:
+            typeof rawError?.message === 'string'
+              ? rawError.message
+              : 'invalid_meta_response',
+        }
+      : null;
+  const logEntry = {
+    endpoint,
+    http_status: response.status,
+    data_count:
+      payload && Array.isArray(payload.data) ? payload.data.length : null,
+    error,
+  };
+  console.info('[meta-ads/graph-call]', JSON.stringify(logEntry));
+  return {
+    ok: response.ok && Boolean(payload),
+    status: response.status,
+    payload,
+  };
+}
+
 export async function exchangeMetaAdsCode(
   config: MetaAdsServerConfig,
   code: string,
@@ -131,27 +191,26 @@ async function readAccessibleAccounts(
 ): Promise<MetaAdAccountChoice[]> {
   const accessibleAccounts: MetaAdAccountChoice[] = [];
   for (const id of candidateIds) {
-    try {
-      const url = new URL(
-        `https://graph.facebook.com/${config.graphVersion}/act_${id}`
-      );
-      url.searchParams.set('fields', 'name,account_id,account_status');
-      const account = await graphJson(
-        url,
-        { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
-        fetcher
-      );
-      accessibleAccounts.push({
-        id: typeof account.account_id === 'string' ? account.account_id : id,
-        name:
-          typeof account.name === 'string' && account.name.trim()
-            ? account.name.trim()
-            : `act_${id}`,
-        accountStatus: numberValue(account.account_status) ?? null,
-      });
-    } catch {
-      // The practical account read is the final permission proof.
-    }
+    const url = new URL(
+      `https://graph.facebook.com/${config.graphVersion}/act_${id}`
+    );
+    url.searchParams.set('fields', 'name,account_id,account_status');
+    const result = await loggedGraphJson(
+      `/act_${id}`,
+      url,
+      { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
+      fetcher
+    );
+    const account = result.payload;
+    if (!result.ok || !account) continue;
+    accessibleAccounts.push({
+      id: typeof account.account_id === 'string' ? account.account_id : id,
+      name:
+        typeof account.name === 'string' && account.name.trim()
+          ? account.name.trim()
+          : `act_${id}`,
+      accountStatus: numberValue(account.account_status) ?? null,
+    });
   }
   return accessibleAccounts;
 }
@@ -177,24 +236,24 @@ export async function discoverMetaAdAccounts(
     ? data.scopes.filter((scope): scope is string => typeof scope === 'string')
     : [];
   const granularScopes = debugScopes(data.granular_scopes);
-  console.info('[meta-ads/debug-token]', {
+  const debugLog = {
     type: typeof data.type === 'string' ? data.type : null,
     scopes,
     granular_scopes: granularScopes.map(({ scope, targetIds }) => ({
       scope,
       target_ids: targetIds,
     })),
-  });
+  };
+  console.info('[meta-ads/debug-token]', JSON.stringify(debugLog));
+  let successfulDiscoveryCall = false;
+  let discoveredCandidate = false;
 
-  const granularAdsRead = granularScopes.find(
-    (scope) => scope.scope === 'ads_read'
-  );
-  const scopesAdsRead = scopes.includes('ads_read');
   async function acceptRoute(
-    route: 'granular_scopes' | 'scopes' | 'business_accounts',
+    route: 'me_adaccounts' | 'business_accounts',
     candidateIds: string[]
   ) {
     if (!candidateIds.length) return null;
+    discoveredCandidate = true;
     const accessibleAccounts = await readAccessibleAccounts(
       config,
       token,
@@ -210,37 +269,29 @@ export async function discoverMetaAdAccounts(
     return accessibleAccounts;
   }
 
-  const granularAccounts = await acceptRoute(
-    'granular_scopes',
-    granularAdsRead?.targetIds ?? []
+  const accountsUrl = new URL(
+    `https://graph.facebook.com/${config.graphVersion}/me/adaccounts`
   );
-  if (granularAccounts) return granularAccounts;
-
-  if (scopesAdsRead) {
-    try {
-      const accountsUrl = new URL(
-        `https://graph.facebook.com/${config.graphVersion}/me/adaccounts`
-      );
-      accountsUrl.searchParams.set('fields', 'name,account_id,account_status');
-      accountsUrl.searchParams.set('limit', '100');
-      const payload = await graphJson(
-        accountsUrl,
-        { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
-        fetcher
-      );
-      const scopeAccounts = await acceptRoute(
-        'scopes',
-        uniqueIds(
-          records(payload).flatMap((account) => [
-            account.account_id,
-            account.id,
-          ])
-        )
-      );
-      if (scopeAccounts) return scopeAccounts;
-    } catch {
-      // Continue to business discovery before rejecting the authorization.
-    }
+  accountsUrl.searchParams.set('fields', 'name,account_id,account_status');
+  accountsUrl.searchParams.set('limit', '100');
+  const directResult = await loggedGraphJson(
+    '/me/adaccounts',
+    accountsUrl,
+    { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
+    fetcher
+  );
+  successfulDiscoveryCall ||= directResult.ok;
+  if (directResult.ok && directResult.payload) {
+    const directAccounts = await acceptRoute(
+      'me_adaccounts',
+      uniqueIds(
+        records(directResult.payload).flatMap((account) => [
+          account.account_id,
+          account.id,
+        ])
+      )
+    );
+    if (directAccounts) return directAccounts;
   }
 
   let businessIds = granularScopes.find(
@@ -253,12 +304,19 @@ export async function discoverMetaAdAccounts(
       );
       businessesUrl.searchParams.set('fields', 'id');
       businessesUrl.searchParams.set('limit', '100');
-      const payload = await graphJson(
+      const result = await loggedGraphJson(
+        '/me/businesses',
         businessesUrl,
         { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
         fetcher
       );
-      businessIds = uniqueIds(records(payload).map((business) => business.id));
+      if (result.ok && result.payload) {
+        businessIds = uniqueIds(
+          records(result.payload).map((business) => business.id)
+        );
+      } else {
+        businessIds = [];
+      }
     } catch {
       businessIds = [];
     }
@@ -273,14 +331,17 @@ export async function discoverMetaAdAccounts(
         );
         url.searchParams.set('fields', 'name,account_id,account_status');
         url.searchParams.set('limit', '100');
-        const payload = await graphJson(
+        const result = await loggedGraphJson(
+          `/${businessId}/${edge}`,
           url,
           { method: 'GET', headers: { Authorization: `Bearer ${token}` } },
           fetcher
         );
+        successfulDiscoveryCall ||= result.ok;
+        if (!result.ok || !result.payload) continue;
         businessAccountIds.push(
           ...uniqueIds(
-            records(payload).flatMap((account) => [
+            records(result.payload).flatMap((account) => [
               account.account_id,
               account.id,
             ])
@@ -298,7 +359,9 @@ export async function discoverMetaAdAccounts(
   if (businessAccounts) return businessAccounts;
 
   throw new MetaAdsApiError(
-    granularAdsRead || scopesAdsRead ? 'no_ad_accounts' : 'ads_read_missing',
+    successfulDiscoveryCall && !discoveredCandidate
+      ? 'no_ad_accounts'
+      : 'ads_read_missing',
     400
   );
 }
