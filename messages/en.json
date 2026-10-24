@@ -383,6 +383,7 @@
     "connectionError": "Could not connect the Meta Ads account.",
     "disconnectError": "Could not disconnect the Meta Ads account.",
     "permissionError": "The authorization does not include ads_read.",
+    "noAccountsError": "No accessible ad accounts were found.",
     "statusError": "Could not load the Meta Ads connection status.",
     "notConfigured": "Facebook Login for Business is not configured in this environment."
   },

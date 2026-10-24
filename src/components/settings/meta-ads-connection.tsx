@@ -83,10 +83,13 @@ export function MetaAdsConnection({
       await onChanged();
       toast.success(t('connectedToast'));
     } catch (error) {
+      const errorCode = error instanceof Error ? error.message : '';
       toast.error(
-        error instanceof Error && error.message === 'ads_read_missing'
+        errorCode === 'ads_read_missing'
           ? t('permissionError')
-          : t('connectionError')
+          : errorCode === 'no_ad_accounts'
+            ? t('noAccountsError')
+            : t('connectionError')
       );
     } finally {
       setBusy(false);

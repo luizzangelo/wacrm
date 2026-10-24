@@ -382,7 +382,8 @@
     "disconnectedToast": "Meta Ads account disconnected.",
     "connectionError": "Could not connect the Meta Ads account.",
     "disconnectError": "Could not disconnect the Meta Ads account.",
-    "permissionError": "The authorization does not include ads_read.",
+    "permissionError": "A permissão ads_read não foi concedida.",
+    "noAccountsError": "Nenhuma conta de anúncios acessível foi encontrada.",
     "statusError": "Could not load the Meta Ads connection status.",
     "notConfigured": "Facebook Login for Business is not configured in this environment."
   },
