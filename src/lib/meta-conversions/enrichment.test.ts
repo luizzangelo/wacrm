@@ -50,7 +50,6 @@ function config(
     account_id: 'account-a',
     access_token: 'encrypted-primary',
     marketing_access_token: 'encrypted-marketing',
-    marketing_token_source: 'facebook_login',
     enabled: true,
     ...overrides,
   };
@@ -94,7 +93,6 @@ function memoryRepository(options?: {
         enriched_at: null,
       });
     }),
-    markConnectionExpired: vi.fn(async () => undefined),
     listCandidates: vi.fn(async (limit) =>
       rows
         .filter((row) => ['pending', 'failed'].includes(row.enrichment_status))
@@ -422,32 +420,6 @@ describe('Meta attribution enrichment', () => {
     expect(serialized).not.toContain(secret);
     expect(serialized).toContain('Permissions error');
     expect(serialized).toContain('18157520');
-  });
-
-  it('marks a Facebook Login connection expired on Meta error 190', async () => {
-    const { repository } = memoryRepository();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    await enrichMetaAdAttribution({
-      repository,
-      accountId: 'account-a',
-      attributionId: 'attr-1',
-      decryptToken: () => 'token',
-      readHierarchy: async () => {
-        throw new MetaMarketingApiError({
-          kind: 'http',
-          http_status: 401,
-          code: 190,
-          message: 'Token expired',
-        });
-      },
-      now: () => new Date('2026-10-24T12:00:00.000Z'),
-    });
-
-    expect(repository.markConnectionExpired).toHaveBeenCalledWith(
-      'account-a',
-      '2026-10-24T12:00:00.000Z'
-    );
   });
 
   it('marks a missing ad_id/source_id as a sanitized permanent failure', async () => {
