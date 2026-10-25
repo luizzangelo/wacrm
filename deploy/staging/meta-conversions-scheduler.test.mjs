@@ -6,9 +6,11 @@ import {
   MIN_INTERVAL_MS,
   REQUEST_TIMEOUT_MS,
   runOnce,
+  runEnrichment,
   runTaskDue,
   runScheduler,
   sanitizedCounts,
+  sanitizedEnrichmentCounts,
   resolveCronIntervalMs,
   resolveCronTimeoutMs,
   resolveSchedulerConfig,
@@ -45,6 +47,10 @@ test('generic safe defaults and explicit per-environment internal endpoint/secre
     config.taskEndpoint,
     'http://isolated_app:3000/api/tasks/due/cron'
   );
+  assert.equal(
+    config.enrichmentEndpoint,
+    'http://isolated_app:3000/api/meta-conversions/enrichment/cron'
+  );
   let calls = 0;
   await runOnce({
     config,
@@ -60,6 +66,48 @@ test('generic safe defaults and explicit per-environment internal endpoint/secre
     },
   });
   assert.equal(calls, 1);
+});
+
+test('attribution enrichment uses the protected internal endpoint and sanitized counters', async () => {
+  let calledUrl;
+  const result = await runEnrichment({
+    config: resolveSchedulerConfig({
+      META_CONVERSIONS_APP_URL: 'http://isolated_app:3000',
+    }),
+    readSecret: () => 'private-secret',
+    fetcher: async (url) => {
+      calledUrl = url;
+      return {
+        status: 200,
+        json: async () => ({
+          scanned: 1,
+          enriched: 1,
+          pending: 0,
+          failed: 0,
+          already_enriched: 0,
+          not_found: 0,
+          errors: 0,
+          token: 'must-not-leak',
+        }),
+      };
+    },
+  });
+  assert.equal(
+    calledUrl,
+    'http://isolated_app:3000/api/meta-conversions/enrichment/cron'
+  );
+  assert.deepEqual(result, {
+    http_status: 200,
+    outcome: 'ok',
+    processed: 1,
+    enriched: 1,
+    pending: 0,
+    failed: 0,
+    already_enriched: 0,
+    not_found: 0,
+    errors: 0,
+  });
+  assert.ok(!JSON.stringify(result).includes('must-not-leak'));
 });
 
 test('task due scheduler uses the same protected internal cadence', async () => {
@@ -293,6 +341,22 @@ test('only nonnegative numeric allowlisted counters can be logged', () => {
   assert.equal(result.sent, null);
   assert.ok(!JSON.stringify(result).includes('PII'));
   assert.ok(!JSON.stringify(result).includes('phone'));
+});
+
+test('enrichment logs only allowlisted nonnegative counters', () => {
+  const result = sanitizedEnrichmentCounts({
+    scanned: 2,
+    enriched: 1,
+    pending: 0,
+    failed: 1,
+    already_enriched: 0,
+    not_found: 0,
+    errors: 0,
+    contact: 'PII',
+  });
+  assert.equal(result.processed, 2);
+  assert.equal(result.enriched, 1);
+  assert.ok(!JSON.stringify(result).includes('PII'));
 });
 
 test('two windows are sequential with 120-second start-to-start cadence', async () => {

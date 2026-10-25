@@ -76,7 +76,7 @@ services:
       META_CONVERSIONS_CRON_SECRET_PATH: "/run/secrets/wacrm_staging_automation_cron_secret"
     command: ["node", "/opt/wacrm/meta-conversions-scheduler.mjs"]
     configs:
-      - source: meta_conversions_scheduler_21b_v1
+      - source: meta_conversions_scheduler_enrichment_v2
         target: /opt/wacrm/meta-conversions-scheduler.mjs
         mode: 0444
     secrets:
@@ -115,7 +115,7 @@ services:
         - traefik.enable=false
 
 configs:
-  meta_conversions_scheduler_21b_v1:
+  meta_conversions_scheduler_enrichment_v2:
     file: ./meta-conversions-scheduler.mjs
 
 networks:

@@ -12,7 +12,8 @@ needed. A versioned Docker Config mounts the scheduler; only the existing cron
 Docker Secret is granted to it. Secret contents are read into memory, never put
 in ENV, command arguments, compose, the image or logs.
 
-One replica performs an immediate GET, then another every 120 seconds
+One replica performs the conversion delivery, due-task and attribution
+enrichment GETs sequentially, then repeats every 120 seconds
 (start-to-start) over the internal overlay DNS `wacrm_staging_app:3000`.
 The request times out after 70 seconds and does not follow redirects or retry.
 Requests are awaited sequentially. Updates and rollbacks use stop-first.

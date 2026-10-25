@@ -62,6 +62,12 @@ export function resolveSchedulerConfig(env = process.env) {
     '/run/secrets/automation_cron_secret';
   return Object.freeze({
     endpoint,
+    enrichmentEndpoint: endpoint
+      ? endpoint.replace(
+          '/api/meta-conversions/events/cron',
+          '/api/meta-conversions/enrichment/cron'
+        )
+      : null,
     taskEndpoint: endpoint
       ? endpoint.replace(
           '/api/meta-conversions/events/cron',
@@ -101,6 +107,19 @@ export function sanitizedCounts(body) {
     skipped: skips.every((value) => value !== null)
       ? count(skips.reduce((sum, value) => sum + value, 0))
       : null,
+    errors: count(input.errors),
+  };
+}
+
+export function sanitizedEnrichmentCounts(body) {
+  const input = body && typeof body === 'object' ? body : {};
+  return {
+    processed: count(input.scanned),
+    enriched: count(input.enriched),
+    pending: count(input.pending),
+    failed: count(input.failed),
+    already_enriched: count(input.already_enriched),
+    not_found: count(input.not_found),
     errors: count(input.errors),
   };
 }
@@ -175,10 +194,46 @@ export async function runTaskDue({
   }
 }
 
+export async function runEnrichment({
+  config = CONFIG,
+  fetcher = fetch,
+  readSecret = () => readFileSync(config.secretPath, 'utf8'),
+} = {}) {
+  if (!config.enrichmentEndpoint || !config.secretPath) {
+    return { http_status: null, outcome: 'configuration_unavailable' };
+  }
+  let secret;
+  try {
+    secret = readSecret().trim();
+    if (!secret) throw new Error('missing');
+  } catch {
+    return { http_status: null, outcome: 'secret_unavailable' };
+  }
+  try {
+    const response = await fetcher(config.enrichmentEndpoint, {
+      method: 'GET',
+      headers: { 'x-cron-secret': secret },
+      redirect: 'error',
+      signal: AbortSignal.timeout(config.timeoutMs),
+    });
+    if (response.status !== 200) {
+      return { http_status: response.status, outcome: 'http_error' };
+    }
+    return {
+      http_status: 200,
+      outcome: 'ok',
+      ...sanitizedEnrichmentCounts(await response.json()),
+    };
+  } catch {
+    return { http_status: null, outcome: 'request_failed' };
+  }
+}
+
 export async function runScheduler({
   intervalMs = INTERVAL_MS,
   run = runOnce,
   runDue,
+  runAttributionEnrichment,
   wait = sleep,
   now = Date.now,
   keepRunning = () => true,
@@ -203,6 +258,17 @@ export async function runScheduler({
         event: 'task_due_scheduler',
         interval_ms: intervalMs,
         ...dueResult,
+      });
+    }
+    const enrichmentRunner =
+      runAttributionEnrichment ?? (run === runOnce ? runEnrichment : null);
+    if (enrichmentRunner) {
+      const enrichmentResult = await enrichmentRunner();
+      report({
+        timestamp: new Date(now()).toISOString(),
+        event: 'meta_attribution_enrichment_scheduler',
+        interval_ms: intervalMs,
+        ...enrichmentResult,
       });
     }
     heartbeat();

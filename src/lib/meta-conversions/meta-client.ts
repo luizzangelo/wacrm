@@ -23,9 +23,55 @@ export interface MetaValidationCheck {
 interface MetaGraphEnvelope {
   id?: string;
   name?: string;
+  data?: Array<{ id?: string; name?: string }>;
   error?: {
     code?: number;
   };
+}
+
+async function readWabaDataset(
+  wabaId: string,
+  requestedDatasetId: string,
+  accessToken: string,
+  fetcher: typeof fetch
+): Promise<MetaValidationCheck> {
+  const url = new URL(
+    `${META_CONVERSIONS_GRAPH_BASE}/${encodeURIComponent(wabaId)}/dataset`
+  );
+
+  try {
+    const response = await fetcher(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(META_CONVERSIONS_REQUEST_TIMEOUT_MS),
+      cache: 'no-store',
+    });
+
+    let payload: MetaGraphEnvelope = {};
+    try {
+      payload = (await response.json()) as MetaGraphEnvelope;
+    } catch {
+      // A non-JSON failure is still classified by its HTTP status below.
+    }
+
+    if (!response.ok) return failedCheck(response.status, payload.error?.code);
+
+    const dataset = payload.data?.find(
+      (item) => item.id === requestedDatasetId
+    );
+    if (!dataset) {
+      return { status: 'not_found', http_status: response.status };
+    }
+
+    return {
+      status: 'valid',
+      http_status: response.status,
+      object_id: dataset.id,
+      object_name: dataset.name,
+    };
+  } catch {
+    return { status: 'network_error' };
+  }
 }
 
 function failedCheck(
@@ -123,18 +169,18 @@ export interface MetaConfigurationValidation {
 }
 
 /**
- * Validate with GET requests only. The AdsPixel node read is the official
- * read-only way to confirm both the token and access to a Dataset/Pixel. No
- * event endpoint is referenced by this module.
+ * Validate with GET requests only. Business Messaging datasets are validated
+ * through their WABA association; reading the dataset as a generic AdsPixel
+ * can return Graph code 100 even when the association is valid.
  */
 export async function validateMetaCredentials(
   input: ValidateMetaCredentialsInput,
   fetcher: typeof fetch = fetch
 ): Promise<MetaConfigurationValidation> {
-  const dataset = await readGraphObject(
+  const dataset = await readWabaDataset(
+    input.wabaId,
     input.datasetId,
     input.accessToken,
-    'id,name',
     fetcher
   );
 

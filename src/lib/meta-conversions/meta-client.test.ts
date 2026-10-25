@@ -16,11 +16,13 @@ const baseInput = {
 };
 
 describe('Meta read-only validation', () => {
-  it('validates an accessible AdsPixel with a GET request', async () => {
+  it('validates a Business Messaging dataset through its WABA association', async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
-        jsonResponse({ id: '123456789', name: 'Business messaging dataset' })
+        jsonResponse({
+          data: [{ id: '123456789', name: 'Business messaging dataset' }],
+        })
       );
 
     const result = await validateMetaCredentials(baseInput, fetcher);
@@ -33,7 +35,7 @@ describe('Meta read-only validation', () => {
       object_id: '123456789',
     });
     const [url, init] = fetcher.mock.calls[0];
-    expect(String(url)).toContain('/v26.0/123456789?fields=id%2Cname');
+    expect(String(url)).toContain('/v26.0/waba-1/dataset');
     expect(init?.method).toBe('GET');
     expect(String(url)).not.toContain('/events');
   });
@@ -63,10 +65,10 @@ describe('Meta read-only validation', () => {
     expect(result.dataset.status).toBe('forbidden');
   });
 
-  it('classifies a missing AdsPixel object', async () => {
+  it('classifies a dataset not associated with the WABA as missing', async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ error: { code: 100 } }, 400));
+      .mockResolvedValue(jsonResponse({ data: [{ id: 'another-dataset' }] }));
 
     const result = await validateMetaCredentials(baseInput, fetcher);
 
@@ -92,7 +94,9 @@ describe('Meta read-only validation', () => {
         (input: string | URL | Request, init?: RequestInit) => Promise<Response>
       >()
       .mockResolvedValueOnce(
-        jsonResponse({ id: '123456789', name: 'Business messaging dataset' })
+        jsonResponse({
+          data: [{ id: '123456789', name: 'Business messaging dataset' }],
+        })
       )
       .mockResolvedValueOnce(jsonResponse({ id: 'system-user-1' }));
 

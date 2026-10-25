@@ -33,7 +33,9 @@ describe('stored Meta Conversions validation', () => {
         expect(init?.headers).toEqual({
           Authorization: 'Bearer EA_TEST_TOKEN',
         });
-        return Response.json({ id: '123456789', name: 'Dataset' });
+        return Response.json({
+          data: [{ id: '123456789', name: 'Dataset' }],
+        });
       }
     );
 
