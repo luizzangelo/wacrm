@@ -222,7 +222,8 @@ export async function exchangeMetaAdsCode(
   url.searchParams.set('client_id', config.appId);
   url.searchParams.set('client_secret', config.appSecret);
   url.searchParams.set('code', code);
-  let payload: Record<string, unknown>;
+  url.searchParams.set('redirect_uri', '');
+  let payload: Record<string, unknown> | null = null;
   try {
     payload = await graphJson(
       '/oauth/access_token',
@@ -230,31 +231,61 @@ export async function exchangeMetaAdsCode(
       { method: 'GET' },
       fetcher
     );
+    console.info('[meta-ads/token-exchange]', { redirect_uri: 'empty' });
   } catch (error) {
     if (error instanceof MetaAdsApiError) {
-      const message = error.metaMessage?.toLowerCase() ?? '';
-      const publicCode =
-        error.metaSubcode === 36008
-          ? 'redirect_uri_mismatch'
-          : message.includes('already been used') ||
-              message.includes('expired') ||
-              message.includes('verification code')
+      if (error.metaCode === 100 && error.metaSubcode === 36008) {
+        const fallbackUrl = new URL(url);
+        fallbackUrl.searchParams.delete('redirect_uri');
+        try {
+          payload = await graphJson(
+            '/oauth/access_token',
+            fallbackUrl,
+            { method: 'GET' },
+            fetcher
+          );
+          console.info('[meta-ads/token-exchange]', {
+            redirect_uri: 'omitted_fallback',
+          });
+        } catch (fallbackError) {
+          if (fallbackError instanceof MetaAdsApiError) {
+            throw new MetaAdsApiError(
+              'redirect_uri_mismatch',
+              fallbackError.status,
+              fallbackError.metaCode,
+              fallbackError.metaSubcode,
+              fallbackError.metaType
+            );
+          }
+          throw fallbackError;
+        }
+      } else {
+        const message = error.metaMessage?.toLowerCase() ?? '';
+        const publicCode =
+          message.includes('already been used') ||
+          message.includes('expired') ||
+          message.includes('verification code')
             ? 'authorization_code_expired_or_used'
             : message.includes('app secret') ||
                 message.includes('client secret')
               ? 'app_secret_invalid'
               : 'code_exchange_failed';
-      throw new MetaAdsApiError(
-        publicCode,
-        error.status,
-        error.metaCode,
-        error.metaSubcode,
-        error.metaType
-      );
+        throw new MetaAdsApiError(
+          publicCode,
+          error.status,
+          error.metaCode,
+          error.metaSubcode,
+          error.metaType
+        );
+      }
     }
-    throw error;
+    if (!(error instanceof MetaAdsApiError)) throw error;
   }
-  if (typeof payload.access_token !== 'string' || !payload.access_token) {
+  if (
+    !payload ||
+    typeof payload.access_token !== 'string' ||
+    !payload.access_token
+  ) {
     throw new MetaAdsApiError('token_exchange_invalid');
   }
   return payload.access_token;

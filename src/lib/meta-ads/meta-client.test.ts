@@ -18,7 +18,8 @@ function json(body: unknown, status = 200) {
 }
 
 describe('Meta Ads Facebook Login client', () => {
-  it('exchanges the JS SDK code without inventing a redirect_uri', async () => {
+  it('exchanges the JS SDK code with redirect_uri present and empty', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const fetcher = vi.fn(async () => json({ access_token: 'USER_TOKEN' }));
     await expect(
       exchangeMetaAdsCode(config, 'ONE_TIME_CODE', fetcher as typeof fetch)
@@ -30,7 +31,8 @@ describe('Meta Ads Facebook Login client', () => {
     expect(url.searchParams.get('client_id')).toBe(config.appId);
     expect(url.searchParams.get('client_secret')).toBe(config.appSecret);
     expect(url.searchParams.get('code')).toBe('ONE_TIME_CODE');
-    expect(url.searchParams.has('redirect_uri')).toBe(false);
+    expect(url.searchParams.has('redirect_uri')).toBe(true);
+    expect(url.searchParams.get('redirect_uri')).toBe('');
   });
 
   it('classifies an authorization code exchange failure by stage', async () => {
@@ -54,6 +56,41 @@ describe('Meta Ads Facebook Login client', () => {
       publicCode: 'redirect_uri_mismatch',
       metaCode: 100,
       metaSubcode: 36008,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const calls = fetcher.mock.calls as unknown as [[URL], [URL]];
+    const first = new URL(String(calls[0][0]));
+    const second = new URL(String(calls[1][0]));
+    expect(first.searchParams.has('redirect_uri')).toBe(true);
+    expect(first.searchParams.get('redirect_uri')).toBe('');
+    expect(second.searchParams.has('redirect_uri')).toBe(false);
+  });
+
+  it('uses the single omitted fallback only after an empty redirect mismatch', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json(
+          {
+            error: {
+              code: 100,
+              error_subcode: 36008,
+              type: 'OAuthException',
+              message: 'redirect_uri mismatch',
+            },
+          },
+          400
+        )
+      )
+      .mockResolvedValueOnce(json({ access_token: 'USER_TOKEN' }));
+
+    await expect(
+      exchangeMetaAdsCode(config, 'ONE_TIME_CODE', fetcher as typeof fetch)
+    ).resolves.toBe('USER_TOKEN');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith('[meta-ads/token-exchange]', {
+      redirect_uri: 'omitted_fallback',
     });
   });
 
