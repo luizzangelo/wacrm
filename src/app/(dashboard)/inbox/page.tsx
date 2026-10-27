@@ -162,6 +162,10 @@ function InboxPageInner() {
       }
       if (!data) return;
       const fetched = normalizeConversation(data);
+      if (fetched.status === 'closed') {
+        setConversations((prev) => prev.filter((c) => c.id !== fetched.id));
+        return;
+      }
       setConversations((prev) => {
         const existing = prev.find((c) => c.id === fetched.id);
         if (existing) {
@@ -296,6 +300,7 @@ function InboxPageInner() {
       const conv = event.new;
 
       if (event.eventType === 'INSERT') {
+        if (conv.status === 'closed') return;
         // Prepend immediately for snappy UX so the new conv shows in the
         // list right away, then hydrate to fill in the `contact` join
         // (realtime payloads never include joins). Skip both if we
@@ -311,6 +316,17 @@ function InboxPageInner() {
       }
 
       if (event.eventType === 'UPDATE') {
+        if (conv.status === 'closed') {
+          setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+          if (activeConversation?.id === conv.id) {
+            setActiveConversation(null);
+            setActiveContact(null);
+            setMessages([]);
+            autoSelectedForDeepLinkRef.current = null;
+            router.replace('/inbox', { scroll: false });
+          }
+          return;
+        }
         if (knownConvIdsRef.current.has(conv.id)) {
           // If this UPDATE is for the conv the user is currently viewing,
           // suppress the incoming unread_count — the user is reading it
@@ -343,7 +359,7 @@ function InboxPageInner() {
         }
       }
     },
-    [activeConversation, hydrateConversation]
+    [activeConversation, hydrateConversation, router]
   );
 
   // Subscribe to realtime. The `isConnected` flag below feeds the
@@ -554,6 +570,17 @@ function InboxPageInner() {
 
   const handleStatusChange = useCallback(
     (conversationId: string, status: ConversationStatus) => {
+      if (status === 'closed') {
+        setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+        if (activeConversation?.id === conversationId) {
+          setActiveConversation(null);
+          setActiveContact(null);
+          setMessages([]);
+          autoSelectedForDeepLinkRef.current = null;
+          router.replace('/inbox', { scroll: false });
+        }
+        return;
+      }
       setConversations((prev) =>
         prev.map((c) => (c.id === conversationId ? { ...c, status } : c))
       );
@@ -561,7 +588,7 @@ function InboxPageInner() {
         setActiveConversation((prev) => (prev ? { ...prev, status } : prev));
       }
     },
-    [activeConversation]
+    [activeConversation, router]
   );
 
   const handleAssignChange = useCallback(
