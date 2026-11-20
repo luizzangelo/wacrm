@@ -1356,6 +1356,7 @@
       "opMissing": "ausente",
       "modeAdd": "Adicionar",
       "modeRemove": "Remover",
+      "tagUnavailable": "tag indisponível",
       "tagPicked": "{mode} tag {tag}…",
       "tagNone": "{mode} tag (nenhuma selecionada)"
     }

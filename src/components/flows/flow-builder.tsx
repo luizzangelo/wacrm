@@ -73,7 +73,11 @@ import { useFlowEditor, type BuilderState } from './flow-editor-state';
 // Root component
 // ============================================================
 
-export function FlowBuilder() {
+export function FlowBuilder({
+  tagNames,
+}: {
+  tagNames: Readonly<Record<string, string>>;
+}) {
   const t = useTranslations('Flows.builder');
   const {
     state,
@@ -186,6 +190,7 @@ export function FlowBuilder() {
               expanded={expandedWithFlash.has(node.node_key)}
               isEntry={state.entry_node_id === node.node_key}
               isFlashed={flashKey === node.node_key}
+              tagNames={tagNames}
               cardRef={setNodeRef(node.node_key)}
               issues={issues.filter(
                 (i) => i.scope === 'node' && i.node_key === node.node_key
@@ -379,6 +384,7 @@ function NodeCard({
   expanded,
   isEntry,
   isFlashed,
+  tagNames,
   cardRef,
   issues,
   onToggle,
@@ -393,6 +399,7 @@ function NodeCard({
   expanded: boolean;
   isEntry: boolean;
   isFlashed: boolean;
+  tagNames: Readonly<Record<string, string>>;
   cardRef: (el: HTMLDivElement | null) => void;
   issues: ValidationIssue[];
   onToggle: () => void;
@@ -406,7 +413,7 @@ function NodeCard({
   const c = nodeColors(node.node_type);
   const hasError = issues.some((i) => i.severity === 'error');
   const tSummary = useTranslations('Flows.summary');
-  const preview = summarizeNode(node, tSummary);
+  const preview = summarizeNode(node, tSummary, tagNames);
   return (
     <div
       ref={cardRef}

@@ -61,6 +61,32 @@ interface Props {
 
 export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
   const t = useTranslations("Flows.builder");
+  const [tagNames, setTagNames] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/tags");
+        if (!response.ok) return;
+        const body = (await response.json()) as {
+          tags?: Array<{ id: string; name: string }>;
+        };
+        if (!cancelled) {
+          setTagNames(
+            Object.fromEntries(
+              (body.tags ?? []).map((tag) => [tag.id, tag.name]),
+            ),
+          );
+        }
+      } catch {
+        // The editor remains usable; summaries show a safe unavailable label.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Read the persisted choice in the useState initializer. Safe even
   // though this is a client component because the parent page only
@@ -142,10 +168,10 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
         {/* ---- stage: the active view, owning its own overflow ---- */}
         <div className="relative mx-6 min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card-2">
           {effectiveView === "canvas" ? (
-            <FlowCanvas />
+            <FlowCanvas tagNames={tagNames} />
           ) : (
             <div className="absolute inset-0 overflow-y-auto">
-              <FlowBuilder />
+              <FlowBuilder tagNames={tagNames} />
             </div>
           )}
         </div>

@@ -4,6 +4,7 @@ import {
   NODE_CATEGORIES,
   NODE_META,
   groupNodeTypesByCategory,
+  summarizeNode,
   type NodeType,
 } from './shared';
 
@@ -42,5 +43,40 @@ describe('groupNodeTypesByCategory', () => {
   it('partitions the full type list without losing or duplicating a type', () => {
     const grouped = groupNodeTypesByCategory(ALL_TYPES).flatMap((g) => g.types);
     expect([...grouped].sort()).toEqual([...ALL_TYPES].sort());
+  });
+});
+
+describe('summarizeNode tag labels', () => {
+  const tagId = '69fd9abb-2898-4f18-b2a4-b322dffc8964';
+  const tagNames = { [tagId]: 'Atacado' };
+
+  it('shows the tag name instead of its UUID for tag actions', () => {
+    const summary = summarizeNode(
+      {
+        node_key: 'tag_contact',
+        node_type: 'set_tag',
+        config: { mode: 'add', tag_id: tagId },
+      },
+      undefined,
+      tagNames,
+    );
+
+    expect(summary).toBe('Add tag Atacado…');
+    expect(summary).not.toContain(tagId);
+  });
+
+  it('shows the tag name instead of its UUID for tag conditions', () => {
+    const summary = summarizeNode(
+      {
+        node_key: 'condition',
+        node_type: 'condition',
+        config: { subject: 'tag', subject_key: tagId, operator: 'present' },
+      },
+      undefined,
+      tagNames,
+    );
+
+    expect(summary).toBe('has tag Atacado');
+    expect(summary).not.toContain(tagId);
   });
 });

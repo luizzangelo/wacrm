@@ -102,6 +102,7 @@ import { NodeConfigForm } from './forms/node-config-form';
 interface NodeData extends Record<string, unknown> {
   node: BuilderNode;
   isEntry: boolean;
+  tagNames: Readonly<Record<string, string>>;
   /** Validator's "look here" pulse — flashes the card border for
    *  ~1.6s. Drives a CSS animation, doesn't change layout. */
   isFlashed: boolean;
@@ -135,11 +136,11 @@ function slotColor(nodeType: NodeType, slotId: string, fallback: string) {
 
 function FlowNodeCard({ data, selected }: NodeProps) {
   const t = useTranslations('Flows.builder');
-  const { node, isEntry, isFlashed } = data as NodeData;
+  const { node, isEntry, isFlashed, tagNames } = data as NodeData;
   const meta = NODE_META[node.node_type];
   const c = nodeColors(node.node_type);
   const tSummary = useTranslations('Flows.summary');
-  const summary = summarizeNode(node, tSummary);
+  const summary = summarizeNode(node, tSummary, tagNames);
   const slots = outgoingSlots(node);
   // Start nodes are entry-only; nothing ever targets them, so they
   // don't need an incoming Handle. Every other node type accepts
@@ -265,15 +266,23 @@ const NODE_TYPES = { flow: FlowNodeCard };
  * (notably, the pan-to-flash effect). The split is required because
  * useReactFlow() must be called inside a ReactFlowProvider.
  */
-export function FlowCanvas() {
+export function FlowCanvas({
+  tagNames,
+}: {
+  tagNames: Readonly<Record<string, string>>;
+}) {
   return (
     <ReactFlowProvider>
-      <FlowCanvasInner />
+      <FlowCanvasInner tagNames={tagNames} />
     </ReactFlowProvider>
   );
 }
 
-function FlowCanvasInner() {
+function FlowCanvasInner({
+  tagNames,
+}: {
+  tagNames: Readonly<Record<string, string>>;
+}) {
   const t = useTranslations('Flows.builder');
   const {
     state,
@@ -345,12 +354,13 @@ function FlowCanvasInner() {
           node: n,
           isEntry: n.node_key === entryNodeId,
           isFlashed: n.node_key === flashKey,
+          tagNames,
         },
       };
     });
 
     return nodes;
-  }, [builderNodes, entryNodeId, flashKey, autoLayoutPositions]);
+  }, [builderNodes, entryNodeId, flashKey, autoLayoutPositions, tagNames]);
 
   const [rfNodes, setRfNodes] = useState<RfNode<NodeData>[]>(derivedRfNodes);
 
