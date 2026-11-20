@@ -4,7 +4,7 @@ version: "3.8"
 
 services:
   app:
-    image: wacrm-staging:5acf84b
+    image: wacrm-staging:e609c79
     environment:
       NODE_ENV: production
       PORT: "3000"
