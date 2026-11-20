@@ -662,6 +662,10 @@ function ConditionForm({
               value={cfg.subject_key ?? ""}
               onValueChange={(v) => onUpdateConfig({ subject_key: v })}
               disabled={tagsLoading || tagsError || tags.length === 0}
+              items={tags.map((tag) => ({
+                value: tag.id,
+                label: tag.name,
+              }))}
             >
               <SelectTrigger className="bg-muted">
                 <SelectValue
@@ -820,6 +824,10 @@ function SetTagForm({
             value={cfg.tag_id ?? ""}
             onValueChange={(v) => onUpdateConfig({ tag_id: v })}
             disabled={loading || error || tags.length === 0}
+            items={tags.map((tag) => ({
+              value: tag.id,
+              label: tag.name,
+            }))}
           >
             <SelectTrigger className="bg-muted">
               <SelectValue
