@@ -603,6 +603,12 @@ interface UserTag {
   color?: string;
 }
 
+interface UserTagsState {
+  tags: UserTag[];
+  loading: boolean;
+  error: boolean;
+}
+
 function ConditionForm({
   cfg,
   allNodes,
@@ -616,7 +622,7 @@ function ConditionForm({
   onUpdateConfig: (patch: Record<string, unknown>) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const tags = useUserTags();
+  const { tags, loading: tagsLoading, error: tagsError } = useUserTags();
 
   const subject = cfg.subject ?? "var";
   const operator = cfg.operator ?? "equals";
@@ -651,13 +657,24 @@ function ConditionForm({
                 ? t("tagLabel")
                 : t("fieldLabel")}
           </label>
-          {subject === "tag" && tags.length > 0 ? (
+          {subject === "tag" ? (
             <Select
               value={cfg.subject_key ?? ""}
               onValueChange={(v) => onUpdateConfig({ subject_key: v })}
+              disabled={tagsLoading || tagsError || tags.length === 0}
             >
               <SelectTrigger className="bg-muted">
-                <SelectValue placeholder="Pick a tag…" />
+                <SelectValue
+                  placeholder={
+                    tagsLoading
+                      ? t("loadingTags")
+                      : tagsError
+                        ? t("tagLoadError")
+                        : tags.length === 0
+                          ? t("noTagsAvailable")
+                          : t("pickTag")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {tags.map((t) => (
@@ -775,7 +792,7 @@ function SetTagForm({
   onUpdateConfig: (patch: Record<string, unknown>) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const tags = useUserTags();
+  const { tags, loading, error } = useUserTags();
 
   return (
     <>
@@ -799,30 +816,32 @@ function SetTagForm({
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted-foreground">{t("tagLabel")}</label>
-          {tags.length > 0 ? (
-            <Select
-              value={cfg.tag_id ?? ""}
-              onValueChange={(v) => onUpdateConfig({ tag_id: v })}
-            >
-              <SelectTrigger className="bg-muted">
-                <SelectValue placeholder="Pick a tag…" />
-              </SelectTrigger>
-              <SelectContent>
-                {tags.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Input
-              value={cfg.tag_id ?? ""}
-              onChange={(e) => onUpdateConfig({ tag_id: e.target.value })}
-              placeholder={t("tagUuidPlaceholder")}
-              className="bg-muted font-mono text-xs"
-            />
-          )}
+          <Select
+            value={cfg.tag_id ?? ""}
+            onValueChange={(v) => onUpdateConfig({ tag_id: v })}
+            disabled={loading || error || tags.length === 0}
+          >
+            <SelectTrigger className="bg-muted">
+              <SelectValue
+                placeholder={
+                  loading
+                    ? t("loadingTags")
+                    : error
+                      ? t("tagLoadError")
+                      : tags.length === 0
+                        ? t("noTagsAvailable")
+                        : t("pickTag")
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {tags.map((tag) => (
+                <SelectItem key={tag.id} value={tag.id}>
+                  {tag.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <NextNodeRow
@@ -837,29 +856,32 @@ function SetTagForm({
 }
 
 /**
- * Shared loader for both `condition` (subject=tag) and `set_tag`.
- * Falls back to raw UUID input if the endpoint is absent on older
- * deployments — the form remains authorable in that case.
+ * Shared account-scoped loader for both `condition` (subject=tag) and
+ * `set_tag`. Tag ids remain the stored value, while authors only see names.
  */
-function useUserTags(): UserTag[] {
+function useUserTags(): UserTagsState {
   const [tags, setTags] = useState<UserTag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/tags").catch(() => null);
-        if (!res || !res.ok) return;
+        const res = await fetch("/api/tags");
+        if (!res.ok) throw new Error("Could not load tags");
         const json = (await res.json()) as { tags?: UserTag[] };
         if (!cancelled) setTags(json.tags ?? []);
       } catch {
-        // Tags endpoint absent — caller falls back to raw input.
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-  return tags;
+  return { tags, loading, error };
 }
 
 // ============================================================
